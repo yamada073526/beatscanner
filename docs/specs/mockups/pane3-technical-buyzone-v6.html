@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="dark">
+<head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>§③ テクニカル・買い場 — 価格機能 統合モックアップ v6（B骨格 × A価格地図 × 5体合議の必須修正）</title>
+<style>
+  :root{
+    --bg-primary:#0f172a;--bg-card:#1e2433;--bg-subtle:#1e2a3a;--bg-muted:#243447;--bg-hover:#253045;
+    --text-primary:#f1f5f9;--text-secondary:#cbd5e1;--text-muted:#94a3b8;--border:#334155;--border-strong:rgba(255,255,255,.14);
+    --gain:#34ef81;--loss:#f87171;--warning:#f59e0b;--accent:#38bdf8;--gold:#d4af37;--radius-sm:8px;--radius-md:12px;--radius-lg:16px;
+    --glow-cyan:0 0 0 1px rgba(56,189,248,.30);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg-primary);color:var(--text-primary);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;font-feature-settings:"tnum";-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:780px;margin:0 auto;padding:22px 22px 80px;}
+  .legend{font-size:12px;color:var(--text-muted);margin:0 0 18px;padding:11px 14px;background:var(--bg-subtle);border:1px dashed var(--border);border-radius:var(--radius-sm);line-height:1.75;}
+  .legend b{color:var(--text-secondary);} .legend .k{color:var(--gold);font-weight:700;} .legend .fix{color:var(--gain);font-weight:700;}
+  .muted{color:var(--text-muted);} .small{font-size:11px;}
+
+  .chapter-h{display:flex;align-items:center;gap:10px;margin:6px 0 12px;}
+  .chapter-h .no{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--gold);background:rgba(212,175,55,.12);border:1px solid rgba(212,175,55,.3);}
+  .chapter-h .ti{font-size:17px;font-weight:700;letter-spacing:-.01em;}
+  .panel{background:var(--bg-card);border:1px solid var(--border);border-top:2px solid color-mix(in srgb,var(--gold) 30%,var(--border));border-radius:var(--radius-lg);padding:18px;margin-bottom:14px;}
+
+  /* 薄い verdict bar（最上部・2秒 anchor／詳細はチャート下） — ★fix⑤: 状態ラベルと価格の重力バランス調整 */
+  .vbar{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-left:3px solid var(--text-muted);border-radius:var(--radius-md);background:var(--bg-subtle);margin-bottom:14px;}
+  .vbar.watch{border-left-color:var(--text-muted);}
+  .vbar.confirm{border-left-color:var(--accent);background:linear-gradient(135deg,rgba(56,189,248,.06),var(--bg-subtle) 55%);}
+  .vbar.caution{border-left-color:var(--warning);background:linear-gradient(135deg,rgba(245,158,11,.05),var(--bg-subtle) 55%);}
+  .vbar .state{font-size:13px;font-weight:700;white-space:nowrap;}
+  .vbar.watch .state{color:var(--text-secondary);} .vbar.confirm .state{color:var(--accent);} .vbar.caution .state{color:var(--warning);}
+  .vbar .px{font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;}
+  .vbar .chg{font-size:12px;color:var(--loss);font-weight:600;}
+  .vbar .upd{margin-left:auto;font-size:10.5px;color:var(--text-muted);}
+
+  /* chart 帯（user 直感: まずチャート） */
+  .ctop{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+  .cchip{font-size:11px;border-radius:6px;padding:3px 9px;border:1px solid var(--border);color:var(--text-secondary);}
+  .cchip.px{font-weight:700;color:var(--text-primary);border-color:var(--border-strong);}
+  .cchip.cup{color:var(--warning);border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.1);}
+  .cchip.gc{color:var(--gain);border-color:rgba(52,239,129,.4);} .cchip.rs{color:var(--text-secondary);}
+  /* ★RS 注記は実装で「現状維持」に決定 (2026-06-30 user): 既存 6体合議の RS tone band (40-79=muted) が
+     「強くない」 を既に表現済み・amber は確定 tone band を変える over-signaling のため不採用。 */
+  .ctools{margin-left:auto;display:flex;gap:5px;align-items:center;}
+  .ctools .tg{font-size:11px;border:1px solid var(--border);border-radius:6px;padding:3px 8px;color:var(--text-secondary);}
+  .periods{display:flex;gap:4px;} .periods .p{font-size:11px;color:var(--text-secondary);border:1px solid var(--border);border-radius:6px;padding:3px 8px;}
+  .periods .p.on{background:var(--accent);color:var(--bg-primary);border-color:var(--accent);font-weight:600;}
+  .chartbox{position:relative;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-subtle);padding:12px 14px;}
+  .ind{display:flex;gap:14px;margin-top:8px;font-size:11px;color:var(--text-muted);flex-wrap:wrap;} .ind .i{display:flex;align-items:center;gap:6px;} .ind .sw{width:14px;height:3px;border-radius:2px;}
+
+  /* 詳細サマリー（チャート下）= 結論の根拠 */
+  .sum{margin-top:16px;padding-top:14px;border-top:1px solid var(--border);}
+  .sum .fact{font-size:13px;color:var(--text-primary);font-weight:500;line-height:1.5;}
+  .sum .chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px;}
+  .sum .c{font-size:11px;color:var(--text-secondary);border:1px solid var(--border);border-radius:999px;padding:3px 10px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;}
+  .sum .c b{font-variant-numeric:tabular-nums;} .sum .c .u{color:var(--text-muted);}
+  .sum .c.warnchip{color:var(--warning);border-color:rgba(245,158,11,.35);}
+
+  /* 価格ラダー */
+  .pl{margin-top:18px;}
+  .pl-label{font-size:12.5px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;}
+  .pl-label .en{color:var(--text-muted);font-weight:400;font-size:11px;margin-left:6px;}
+  .pl-sub{font-size:11px;color:var(--text-muted);margin-bottom:10px;line-height:1.5;}
+  .axis{position:relative;height:350px;margin:4px 0 2px;padding:6px 0;}
+  /* ★§38: rail は中立単色（緑赤グラデは断定示唆＝原則1違反のため不採用）。質感はゾーンラベルとゲージで代替 */
+  .axis .rail{position:absolute;left:188px;top:8px;bottom:8px;width:2px;border-radius:2px;background:var(--border);}
+  .axis .zbreak{position:absolute;left:181px;width:16px;border:1px dashed var(--border-strong);border-radius:6px;background:rgba(255,255,255,.03);}
+  .axis .zwatch{position:absolute;left:184px;width:10px;border-radius:6px;background:var(--text-muted);opacity:.07;}
+  .axis .zlab{position:absolute;left:206px;font-size:9px;font-weight:700;letter-spacing:.03em;white-space:nowrap;color:var(--text-muted);}
+  .axis .zlab.brk{color:var(--text-secondary);} .axis .zlab.warn{color:var(--warning);opacity:.85;}
+  .lv{position:absolute;left:0;right:0;height:0;}
+  .lv .tick{position:absolute;left:180px;width:18px;height:1px;background:var(--border-strong);}
+  .lv .lab{position:absolute;right:calc(100% - 176px);text-align:right;width:176px;padding-right:14px;font-size:11.5px;color:var(--text-secondary);line-height:1.25;}
+  .lv .lab .sub{display:block;font-size:9px;color:var(--text-muted);}
+  .lv .val{position:absolute;left:208px;font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--text-primary);}
+  .lv .dist{margin-left:8px;font-size:10.5px;color:var(--text-muted);font-variant-numeric:tabular-nums;}
+  .lv.up .dist{color:var(--gain);} .lv.dn .dist{color:var(--loss);}
+  .lv .lock{margin-left:6px;font-size:9px;color:var(--gold);}
+  .lv .ref{margin-left:6px;font-size:9px;color:var(--text-muted);border:1px solid var(--border);border-radius:4px;padding:0 5px;}
+  .lv.locked .val{color:var(--text-muted);letter-spacing:.12em;}
+  .lv.locked .tick{background:var(--border);}
+  .lv.pivot .lab{color:var(--text-primary);font-weight:600;}
+  .lv.now .dot{position:absolute;left:183px;width:13px;height:13px;border-radius:50%;background:var(--accent);box-shadow:var(--glow-cyan);transform:translateX(-1px);}
+  .lv.now .lab{font-size:12.5px;color:var(--accent);font-weight:700;}
+  .lv.now .val{font-size:15px;font-weight:700;color:var(--accent);}
+  /* 現在地マーカー脇の「余地」callout。★fix①: 下方 −8% は累進開示で抑制（ブレイク待ち状態では非表示） */
+  .lv.now .room{position:absolute;left:300px;top:-7px;display:flex;flex-direction:column;gap:4px;font-size:10px;line-height:1.25;}
+  .lv.now .room .up{color:var(--text-secondary);} .lv.now .room .up b{color:var(--text-primary);font-variant-numeric:tabular-nums;} .lv.now .room .up .lk{color:var(--gold);font-size:9px;}
+
+  .pl-teaser{margin-top:12px;display:flex;align-items:center;gap:10px;border:1px dashed var(--gold);border-radius:var(--radius-sm);padding:10px 13px;background:rgba(212,175,55,.06);}
+  .pl-teaser .lk{font-size:13px;} .pl-teaser .tx{font-size:11.5px;color:var(--text-secondary);line-height:1.5;} .pl-teaser .tx b{color:var(--gold);}
+  .pl-teaser .cta{margin-left:auto;font-size:11px;font-weight:700;color:var(--bg-primary);background:var(--gold);border-radius:6px;padding:5px 12px;white-space:nowrap;}
+  .disc{font-size:10.5px;color:var(--text-muted);margin-top:12px;line-height:1.55;}
+
+  /* ブレイク出来高ゲージ（針付き・達成時のみ緑＝確定事実の polarity・gold は使わない）
+     ★fix④: 高さ 12→16px・ラベルに台座を付与して instrument 感を出す */
+  .bo{margin-top:18px;padding-top:14px;border-top:1px solid var(--border);}
+  .bo .h{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px;}
+  .bo .h .t{font-size:12px;font-weight:600;color:var(--text-secondary);}
+  .bo .gauge{position:relative;height:16px;border-radius:8px;background:var(--bg-muted);border:1px solid var(--border);}
+  .bo .fill{position:absolute;left:0;top:0;bottom:0;border-radius:8px 0 0 8px;background:linear-gradient(90deg,rgba(148,163,184,.45),var(--text-muted));}
+  .bo.achieved .fill{background:linear-gradient(90deg,color-mix(in srgb,var(--gain) 40%,transparent),color-mix(in srgb,var(--gain) 70%,transparent));}
+  .bo .needle{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--text-primary);border-radius:2px;}
+  .bo .nlab{position:absolute;top:-23px;transform:translateX(-50%);font-size:10px;font-weight:700;color:var(--text-primary);white-space:nowrap;font-variant-numeric:tabular-nums;background:var(--bg-subtle);border:1px solid var(--border-strong);border-radius:4px;padding:1px 6px;}
+  .bo .thr{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--gain);border-radius:2px;}
+  .bo .thrlab{position:absolute;top:-23px;transform:translateX(-50%);font-size:9px;color:var(--gain);white-space:nowrap;background:rgba(52,239,129,.08);border:1px solid rgba(52,239,129,.3);border-radius:4px;padding:1px 6px;}
+  .bo .scale{display:flex;justify-content:space-between;font-size:9px;color:var(--text-muted);margin-top:6px;}
+  .bo .note{font-size:11px;color:var(--text-secondary);margin-top:8px;line-height:1.5;} .bo .note b{color:var(--text-primary);}
+  .bo .andnote{font-size:10.5px;color:var(--text-muted);margin-top:6px;line-height:1.5;} .bo .andnote b{color:var(--text-secondary);}
+
+  details.fold{margin-top:16px;border-top:1px solid var(--border);padding-top:12px;}
+  details.fold>summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;}
+  details.fold>summary::-webkit-details-marker{display:none;}
+  details.fold .ftitle{font-size:12.5px;font-weight:600;color:var(--text-secondary);}
+  details.fold .fsum{font-size:11px;color:var(--text-muted);margin-left:auto;}
+  details.fold .chev{font-size:11px;color:var(--text-muted);transition:transform .15s;} details.fold[open] .chev{transform:rotate(90deg);}
+  .ret-term{margin-top:12px;} .ret-term .tl{font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;}
+  .retgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+  .retgrid .rc{border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center;background:var(--bg-subtle);}
+  .retgrid .rk{font-size:10px;color:var(--text-muted);} .retgrid .rv{font-size:14px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums;}
+  .comp-row{display:flex;align-items:center;gap:8px;border-left:1px solid var(--border);padding:4px 0 4px 10px;font-size:12.5px;color:var(--text-secondary);margin-top:8px;}
+  .comp-row .st{margin-left:auto;font-size:11px;color:var(--text-muted);} .comp-row .st.ok::before{content:"●";color:var(--gain);opacity:.5;margin-right:4px;font-size:8px;vertical-align:middle;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="legend">
+    <b>§③ テクニカル・買い場 — 価格機能 統合モックアップ v6</b>（v5[B]骨格 ＋ 原版[A]の長所統合 ＋ 5体合議の必須修正）<br>
+    <span class="fix">統合元</span>: <b>骨格＝v5(本日版)</b>（verdict bar 2秒 anchor／チャート先行／de-noise したサマリー／中立 rail＝§38-safe／出来高ゲージ針／折りたたみリターン／null 注記）。<b>原版(full-v5 §③)から統合</b>＝チャートの価格地図（Pivot/50日線/52週高値ライン。価格値はラダーに集約し、チャートには載せない＝§38-safe）。原版の rail 緑赤グラデ・zone 緑赤塗りは §38（断定示唆＝原則1）で<b>不採用</b>。<br>
+    <span class="k">5体合議の必須修正</span>: ① <b>「↓ リスクまで −8%」を累進開示で抑制</b>（ブレイク待ち中は非表示。verdict が「ブレイク確認」へ遷移して初めて「買値 −8% 損切り」を表示＝押し目買い誘発と価格逆算漏洩を両断）② <b>RS 50 は現状維持</b>（既存6体合議の muted tone が「強くない」を表現済み・amber は over-signaling のため不採用 2026-06-30）③ <b>出来高ゲージに AND 条件</b>（Pivot 上抜け かつ +40%）④ <b>ゲージ視認性</b>（高さ+ラベル台座）⑤ verdict bar の状態ラベルと価格の重力バランス調整＋ctop の現在値重複を削除。<br>
+    <span class="muted">※ 数値は NVDA 想定サンプル。状態は「ブレイク待ち（監視）」を表示中。長期リターン(3Y+)は別 fetch のため初期実装は 1Y 内先行。</span>
+  </div>
+
+  <div class="chapter-h"><span class="no">③</span><span class="ti">テクニカル・買い場</span></div>
+
+  <div class="panel">
+    <!-- 薄い verdict bar（最上部・2秒 anchor） -->
+    <div class="vbar watch">
+      <span class="state">⏳ ブレイク待ち（監視）</span>
+      <span class="px">$192.53</span>
+      <span class="chg">−1.6%</span>
+      <span class="upd">最終更新 2分前</span>
+    </div>
+
+    <!-- chart（user 直感: まずチャートを確認）。★fix⑤: 現在値 chip は verdict bar と重複のため削除 -->
+    <div class="ctop">
+      <span class="cchip cup">取っ手付きカップ 形成中</span>
+      <span class="cchip gc">ゴールデンクロス</span>
+      <span class="cchip rs">RS 50</span>
+      <span class="ctools"><span class="tg">線 / ローソク</span><span class="periods"><span class="p">1M</span><span class="p on">3M</span><span class="p">6M</span><span class="p">1Y</span><span class="p">5Y</span></span></span>
+    </div>
+    <div class="chartbox">
+      <!-- ★原版[A]の価格地図を統合: Pivot/50日線/52週高値の水平ライン。価格値はチャートに載せず（§38-safe）、数値はラダーに集約 -->
+      <svg viewBox="0 0 700 170" width="100%" height="140" preserveAspectRatio="none">
+        <defs><linearGradient id="ar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#38bdf8" stop-opacity=".20"/><stop offset="1" stop-color="#38bdf8" stop-opacity="0"/></linearGradient></defs>
+        <line x1="0" y1="22" x2="700" y2="22" stroke="#94a3b8" stroke-dasharray="2 4" stroke-width="1" opacity=".4"/>
+        <line x1="0" y1="34" x2="700" y2="34" stroke="#94a3b8" stroke-dasharray="5 4" stroke-width="1" opacity=".55"/>
+        <line x1="0" y1="74" x2="700" y2="74" stroke="#f59e0b" stroke-dasharray="4 4" stroke-width="1" opacity=".55"/>
+        <path d="M0,120 L60,112 L120,58 L180,90 L240,112 L300,120 L360,118 L420,96 L480,80 L520,74 L580,84 L640,78 L700,86 L700,170 L0,170 Z" fill="url(#ar)"/>
+        <path d="M0,120 L60,112 L120,58 L180,90 L240,112 L300,120 L360,118 L420,96 L480,80 L520,74 L580,84 L640,78 L700,86" fill="none" stroke="#38bdf8" stroke-width="2"/>
+        <path d="M0,110 L350,98 L700,88" fill="none" stroke="#f59e0b" stroke-width="1.3" opacity=".8"/>
+        <circle cx="520" cy="74" r="3.5" fill="#34ef81"/>
+      </svg>
+      <div class="ind">
+        <div class="i"><span class="sw" style="background:#38bdf8;"></span>株価</div>
+        <div class="i"><span class="sw" style="background:#f59e0b;"></span>SMA 50</div>
+        <div class="i"><span class="sw" style="background:#94a3b8;"></span>買い点 Pivot</div>
+        <div class="i"><span class="sw" style="background:#94a3b8;opacity:.5;"></span>52週高値</div>
+        <div class="i"><span class="sw" style="background:#34ef81;"></span>決算日（Beat=緑/Miss=赤）</div>
+      </div>
+    </div>
+
+    <!-- 詳細サマリー（チャート下） -->
+    <div class="sum">
+      <div class="fact">買い点 Pivot を<b style="color:var(--text-primary)">出来高+40%で上抜けるまで待機</b>（O'Neil ルール上のブレイク確認の目安。「下がったら買う」ではなく上抜けを待つ）。</div>
+
+      <div class="chips">
+        <span class="c warnchip">⚠ 出来高 <b>×0.92</b> <span class="u">／+40%未達</span></span>
+        <span class="c warnchip">⚠ 地合い Distribution <b>3</b>/25日</span>
+      </div>
+    </div>
+
+    <!-- 価格ラダー -->
+    <div class="pl">
+      <div class="pl-label">主要な価格水準<span class="en">— 価格ラダー</span></div>
+      <div class="pl-sub"><b>テクニカル上の節目（目安）</b>。買い点・支持線・損切り基準は Premium。</div>
+      <div class="axis">
+        <div class="rail"></div>
+        <div class="zbreak" style="top:70px;height:26px;"></div>
+        <div class="zlab brk" style="top:52px;">ブレイク確認ゾーン<br><span style="font-weight:400;">Pivot 〜 +5%</span></div>
+        <div class="zwatch" style="top:108px;height:130px;"></div>
+        <div class="zlab" style="top:198px;">監視（ベース形成中）</div>
+        <div class="zlab warn" style="top:326px;">警戒（50日線割れ以下）</div>
+
+        <div class="lv up" style="top:14px;"><span class="tick"></span>
+          <span class="lab">アナリスト目標<span class="sub">consensus n=74・12ヶ月予想</span></span>
+          <span class="val">$308.00<span class="ref">参考</span></span></div>
+        <div class="lv up locked pivot" style="top:96px;"><span class="tick"></span>
+          <span class="lab">買い点 Pivot<span class="sub">取っ手付きカップ・ブレイクで確認</span></span>
+          <span class="val">• • •<span class="lock">🔒 Premium</span></span></div>
+        <div class="lv up" style="top:130px;"><span class="tick"></span>
+          <span class="lab">52週高値</span>
+          <span class="val">$212.19<span class="dist">+10.2%</span></span></div>
+        <div class="lv now" style="top:182px;"><span class="dot"></span><span class="tick" style="background:var(--accent);"></span>
+          <span class="lab">現在価格<span class="sub">当日</span></span>
+          <span class="val">$192.53</span>
+          <span class="room">
+            <span class="up">↑ ブレイクまで <b>+12.0%</b> <span class="lk">🔒</span></span>
+          </span></div>
+        <div class="lv dn" style="top:226px;"><span class="tick"></span>
+          <span class="lab">50日移動平均</span>
+          <span class="val">$185.00<span class="dist">−3.9%</span></span></div>
+        <div class="lv dn locked" style="top:268px;"><span class="tick"></span>
+          <span class="lab">支持線目安<span class="sub">box support</span></span>
+          <span class="val">• • •<span class="lock">🔒</span></span></div>
+        <div class="lv dn locked" style="top:306px;"><span class="tick"></span>
+          <span class="lab">リスク確認ライン<span class="sub">損切り基準（ブレイク後）</span></span>
+          <span class="val">• • •<span class="lock">🔒</span></span></div>
+      </div>
+      <div class="pl-teaser">
+        <span class="lk">🔒</span>
+        <span class="tx"><b>買い点 Pivot・支持線・損切り基準（買値 −8%）</b> は Premium で開放。取っ手付きカップの買い点と損切り基準を数値で。<span class="muted">（データが算出された銘柄のみ表示）</span></span>
+        <span class="cta">Premium を見る</span>
+      </div>
+      <p class="disc">※ 各水準はテクニカル上の目安で、将来の値動きや売買タイミングを保証・推奨するものではありません。アナリスト目標は12ヶ月コンセンサス予想（達成保証なし）で、損切り目安とは時間軸が異なります。損切り基準（買値 −8%）はブレイク後にエントリーした後の規律であり、ブレイク前の現在値から逆算する水準ではありません。</p>
+    </div>
+
+    <!-- ブレイク出来高ゲージ（針付き）★fix③: AND 条件を明記 -->
+    <div class="bo">
+      <div class="h"><span class="t">ブレイク確認の出来高（O'Neil +40% 基準）</span></div>
+      <div class="gauge">
+        <div class="fill" style="width:57.5%;"></div>
+        <div class="needle" style="left:57.5%;"></div>
+        <div class="nlab" style="left:57.5%;">×0.92</div>
+        <div class="thr" style="left:87.5%;"></div>
+        <div class="thrlab" style="left:87.5%;">+40% 基準</div>
+      </div>
+      <div class="scale"><span>×0</span><span>×0.5</span><span>×1.0</span><span>×1.6</span></div>
+      <div class="note">出来高は<b>ブレイク基準（×1.40）に未到達</b>。O'Neil の +40% 出来高条件は現時点で満たされていません（＝有効なブレイクは確認できていません）。</div>
+      <div class="andnote">※ 有効なブレイクは<b>「Pivot を上抜け」かつ「出来高 +40%」</b>の両方が必要です。出来高だけが増えても、Pivot 上抜けがなければブレイク確認にはなりません（早撃ち防止）。</div>
+    </div>
+
+    <details class="fold">
+      <summary><span class="ftitle">期間別リターン</span><span class="fsum">短期 −8.8%〜+28.4% ／ 長期 +22%〜+9,640%</span><span class="chev">▸</span></summary>
+      <p class="disc" style="margin:8px 0 0;">過去の実績であり、将来の成果を示すものではありません（価格ベース・分配金含まず）。</p>
+      <div class="ret-term">
+        <div class="tl">短期</div>
+        <div class="retgrid">
+          <div class="rc"><div class="rk">1W</div><div class="rv" style="color:var(--loss)">−8.6%</div></div>
+          <div class="rc"><div class="rk">1M</div><div class="rv" style="color:var(--loss)">−8.8%</div></div>
+          <div class="rc"><div class="rk">3M</div><div class="rv" style="color:var(--gain)">+14.9%</div></div>
+          <div class="rc"><div class="rk">6M</div><div class="rv" style="color:var(--gain)">+28.4%</div></div>
+        </div>
+      </div>
+      <div class="ret-term">
+        <div class="tl">長期 <span style="font-weight:400;color:var(--text-muted);text-transform:none;letter-spacing:0;">（3Y+ は別 fetch・初期実装は 1Y 内先行）</span></div>
+        <div class="retgrid">
+          <div class="rc"><div class="rk">1Y</div><div class="rv" style="color:var(--gain)">+22.1%</div></div>
+          <div class="rc"><div class="rk">3Y</div><div class="rv" style="color:var(--gain)">+212%</div></div>
+          <div class="rc"><div class="rk">5Y</div><div class="rv" style="color:var(--gain)">+1,180%</div></div>
+          <div class="rc"><div class="rk">10Y</div><div class="rv" style="color:var(--gain)">+9,640%</div></div>
+        </div>
+      </div>
+    </details>
+
+    <details class="fold">
+      <summary><span class="ftitle" style="font-size:11px;color:var(--text-muted);font-weight:500;">データ取得</span><span class="fsum">決算・地合い・価格の元データを取得済み（1件は非該当）</span><span class="chev">▸</span></summary>
+      <div class="comp-row">価格・移動平均・出来高<span class="st ok">取得済み</span></div>
+      <div class="comp-row">RS / 地合い（Distribution Days）<span class="st ok">取得済み</span></div>
+      <div class="comp-row">来期ガイダンス<span class="st">非該当（未開示）</span></div>
+    </details>
+
+    <p class="disc" style="border-top:1px dashed var(--border);padding-top:10px;margin-top:14px;">
+      <b style="color:var(--text-secondary);">取っ手付きカップ等が未検出の銘柄</b>では買い点 Pivot・支持線は算出できません。その場合は「• • • 🔒」を出さず<b>「— 未検出（対象外）」</b>と表示し、現在地マーカーの「ブレイクまで」callout とティーザーも非表示にします（Premium に上げても値が無い Trust Cliff を作らないため）。
+    </p>
+
+    <p class="disc" style="margin-top:10px;">
+      <b style="color:var(--text-secondary);">累進開示について</b>: 本モックアップは「ブレイク待ち（監視）」状態を表示しています。状態が<b>「ブレイク確認」</b>へ遷移すると、現在地マーカー脇に「<b>↓ 買値 −8% 損切り</b>」が現れ、ブレイク確認ゾーン（Pivot〜+5%）が強調されます。ブレイク前に損切りラインを見せないのは、「下落余地＝買い場」という押し目買いの誤読（じっちゃまプロトコルが否定）を防ぐためです。
+    </p>
+  </div>
+</div>
+</body>
+</html>

@@ -19,6 +19,9 @@ import StockPriceChart from '../../../../components/StockPriceChart.jsx';
 // SPEC 2026-05-28 Sprint 4 + 6 (pillar 2 technical): Chart 直下に hero card 2 つを並列配置
 // v187 (3体合議 ui/金融/qa 全員一致): テクニカル章の横並び売買目安カードを統合する価格 ladder (縦の数直線)。
 import PriceLadder from '../../../../components/PriceLadder.jsx';
+// §③ 章頭の verdict bar (2秒 anchor)。3体合議 + user gate 2026-06-30。cup_handle.state を source に
+//   (PriceLadder と同 source = §③ 内の局面表示が矛盾しない)。静的辞書のみ・zero-fetch。
+import BuyZoneVerdictBar from './sections/BuyZoneVerdictBar.jsx';
 // v127 R16-3 (R12-1 Phase 1 R2): IBD Distribution Day カウンター (機関の売り圧力目安)
 // v126 R8-3 Phase 2: MarketSurge 互換 Cup-Handle pivot narration (state=formation 時のみ表示)
 // v126 R8-3 Phase 3: 直近 breakout = support level narration (last_breakout 取得時のみ表示)
@@ -378,13 +381,21 @@ export default function JudgmentDetail({
   //   technical endpoint は dedupGet coalesce 済 (StateCompass / prefetch / 各 zone card と同一 URL) のため
   //   追加 fetch は発生しない。patterns.rs = { rs_vs_spy_pct, self_percentile, ranking_label, period_months }。
   const [technicalRs, setTechnicalRs] = useState(null);
+  // §③ verdict bar 用の cup_handle.state。同一 fetchTechnical (dedupGet coalesce) から抽出 = 追加 fetch 0。
+  //   PriceLadder の cup = technical?.patterns?.cup_handle と同 source のため §③ 内で局面表示が矛盾しない。
+  const [cupState, setCupState] = useState(null);
   useEffect(() => {
     setTechnicalRs(null); // ticker 切替時に他銘柄の RS 残骸を出さない
+    setCupState(null);
     if (!selectedTicker) return undefined;
     let cancelled = false;
     fetchTechnical(selectedTicker, TECHNICAL_CANONICAL_PATTERNS)
-      .then((t) => { if (!cancelled) setTechnicalRs(t?.patterns?.rs || null); })
-      .catch(() => { if (!cancelled) setTechnicalRs(null); });
+      .then((t) => {
+        if (cancelled) return;
+        setTechnicalRs(t?.patterns?.rs || null);
+        setCupState(t?.patterns?.cup_handle?.state || null);
+      })
+      .catch(() => { if (!cancelled) { setTechnicalRs(null); setCupState(null); } });
     return () => { cancelled = true; };
   }, [selectedTicker]);
 
@@ -506,15 +517,12 @@ export default function JudgmentDetail({
           - 発光系 class 不使用、28px 独立バー */}
       <DetailBreadcrumb />
 
-      {/* 完全性台帳 Sprint3 (SPEC_2026-06-13): 規律の元データ取得状況の最上部ロールアップ badge。
-          ds-judgment-detail 直下・DetailBreadcrumb 直後の単一挿入で、v6 単一経路の「最上部・独立1行」 を
-          保証する (旧 v4/v5 二重 mount 経路は Sprint 4b で撤去)。badge 内部で取得状況に応じ
-          empty/loading/errored/main を自己解決 (常時表示・色中立・取得失敗時のみ存在感)。
-          gate: analyze エラー (detail.error = rate limit 等、 retry banner と同条件) のときだけ badge を
-          出さない = 「取得」 と「分析取得失敗」 が同一画面で矛盾するのを防ぐ (敵対的検証 Trust Cliff minor)。
-          ※ result gate は不可: 正常 demo フローでも result は null になりうる (hero/5条件は detail/verdict
-          から描画) ため badge が常に消えてしまう (本番 snap で判明)。analyze エラー時のみ抑止が正。 */}
-      {!detail?.error && <CompletenessRollupBadge ticker={selectedTicker} />}
+      {/* 完全性台帳 (CompletenessRollupBadge) は mockup v5 (2026-06-29 正本) で §③ テクニカル章カードの
+          末尾へ移設した (旧 SPEC_2026-06-13 は最上部配置)。理由: quiet 化 (2026-06-29 user feedback
+          「わざわざ見に行くことはほぼない」) + 「データ取得状況」 は決算/地合い・価格の元データ文脈に帰属させる方が
+          自然 = §③ 末尾 footer が IA 上適切 (mockup legend「§③ 末尾に追加」)。
+          実 mount は §③ CHAPTER_FRAME 末尾 (v6-technical-section 内) を参照。
+          gate (!detail?.error) は移設先でも維持 = 分析取得失敗時に「取得」 と矛盾させない。 */}
 
 
       {/* P0-1/P0-3: 分析する button は auto runAnalyze (P0-2) が失敗した場合の fallback。
@@ -797,6 +805,12 @@ export default function JudgmentDetail({
                 </div>
                 {/* task4: 章の内容を共通カード枠で囲う */}
                 <div style={CHAPTER_FRAME}>
+                {/* verdict bar (2秒 anchor): 章頭・チャート前。mockup v6 .vbar 準拠。
+                    cup_handle.state→tone 静的辞書 (buyZoneVerdict.js)。price/changePct=detail 由来。
+                    §38: confirm に色を付けない (色は過熱 amber の警告のみ)・Row2 に動的数値なし。 */}
+                {selectedTicker && (
+                  <BuyZoneVerdictBar state={cupState} price={detail?.price} changePct={detail?.changePct} />
+                )}
                 {/* 同定リボン: mockup 非対応 + L0 同定層と情報重複のため撤去
                     (2026-06-28 mockup 忠実化・user gate)。 */}
                 {/* チャート + PriceLadder = v5 の 1 ユニット構造を継承（mockup L4: 価格ラダー → 期間別リターン 順）*/}
@@ -816,17 +830,28 @@ export default function JudgmentDetail({
                 {selectedTicker && (
                   <PriceLadder ticker={selectedTicker} plan={plan} onUpgrade={detailContext.onUpgrade} />
                 )}
-                {/* 期間別リターン（Phase2: 価格目安=PriceLadder 直下へ昇順・mockup v5 L4 準拠。
-                    ブレイクアウト強度行より前 = 価格目安の直下に配置）。
-                    ReturnGrid は usePeriodReturns 内蔵で親 data 配線不要。splitByTerm で短期/長期 2 段。*/}
+                {/* 期間別リターン（Sprint2: mockup v6 .fold = 折りたたみ化で §③ de-noise・user gate 2026-06-30）。
+                    AccordionSection で wrap し既定 collapsed。折りたたみ時 children unmount のため
+                    period-returns fetch も fold 展開まで自然に defer（backend 無変更で遅延読込・別fetch不要）。
+                    summary は中立ラベル（過去リターン数値を teaser に出さない＝§38/景表法 §5 safe）＋基準開示。
+                    ReturnGrid は sectionLabel={null}（fold title と二重見出し回避）・splitByTerm で短期/長期 2 段。*/}
                 {selectedTicker && (
-                  <ReturnGrid
-                    ticker={selectedTicker}
-                    frameless
-                    splitByTerm
-                    sectionLabel="期間別リターン"
-                    testId="v6-return-grid"
-                  />
+                  <AccordionSection
+                    key="v6-return-grid-fold"
+                    id="sec-v6-return-grid"
+                    title="期間別リターン"
+                    tier={3}
+                    defaultOpen={false}
+                    summary="価格ベース・分配金含まず"
+                  >
+                    <ReturnGrid
+                      ticker={selectedTicker}
+                      frameless
+                      splitByTerm
+                      sectionLabel={null}
+                      testId="v6-return-grid"
+                    />
+                  </AccordionSection>
                 )}
                 {/* buyq: mockup L4「ブレイクアウト強度（参考）」行。静的・§38-safe（参考/目安、行動指示なし）。*/}
                 {selectedTicker && (
@@ -839,6 +864,12 @@ export default function JudgmentDetail({
                       O'Neil 基準: ブレイク時 出来高 +40% 以上が目安
                     </span>
                   </div>
+                )}
+                {/* 完全性台帳 quiet (mockup v5 §③ 末尾の <details class="comp"> に相当)。
+                    最上部から移設。gate (!detail?.error) は旧位置と同条件で維持 = 「取得」 と
+                    「分析取得失敗」 を同一画面で矛盾させない。badge 内部で empty/loading/errored/main を自己解決。 */}
+                {selectedTicker && !detail?.error && (
+                  <CompletenessRollupBadge ticker={selectedTicker} />
                 )}
                 </div>
               </section>
@@ -853,6 +884,19 @@ export default function JudgmentDetail({
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={CHAPTER_NO_STYLE}>④</span>
                   <span style={{ fontSize: 17, fontWeight: 700 }}>図解で理解する</span>
+                  {/* mockup v5 §④ の meta Pro バッジ (章見出しで Pro gate を予告)。
+                      ai_diagram = PLAN.PRO。semantic token のみで装飾 (発光・色直書きなし)。 */}
+                  <span style={{
+                    marginLeft: 'auto',
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    letterSpacing: '0.04em',
+                    color: 'var(--color-gold)',
+                    padding: '2px 8px',
+                    borderRadius: 'var(--radius-sm, 6px)',
+                    border: '1px solid color-mix(in srgb, var(--color-gold) 35%, transparent)',
+                    background: 'color-mix(in srgb, var(--color-gold) 10%, transparent)',
+                  }}>Pro</span>
                 </div>
                 {/* task4: 章の内容を共通カード枠で囲う */}
                 <div style={CHAPTER_FRAME}>

@@ -227,7 +227,7 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
     return () => { cancelled = true; };
   }, [ticker]);
 
-  const { levels, current, sma50Dist, distCount, stateText, volRatio } = useMemo(() => {
+  const { levels, current, sma50Dist, distCount, stateText, volRatio, pivot, isBreakoutConfirmed } = useMemo(() => {
     const prices = priceData?.prices;
     const current = (prices?.length && Number.isFinite(prices[prices.length - 1]?.close))
       ? prices[prices.length - 1].close : null;
@@ -273,6 +273,10 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
     // 混乱する (高値から 8% 超下落した銘柄)。 ladder は現在基準で下値に統一し、 ラベルでも基準を明示
     // (チャートが「(高値比)」 と明示しているのと対称。 同名「-8%」 が別価格を指す Trust Cliff の解消)。
     const stop = Number.isFinite(current) ? current * 0.92 : null;
+    // 累進開示 (user 承認 2026-06-30 v6): 損切り −8% は「買値基準・ブレイク後」 の規律。 ブレイク未確認 (監視)
+    // で現在値基準の −8% を見せると「下落余地=買い場」 の押し目買い誤読 + 価格逆算 (§38) を招くため、
+    // breakout 確認状態 (breakout_support / breakout_extended) でのみ stop レベルを提示する (旧 Q2「常時無料」を更新)。
+    const isBreakoutConfirmed = cup?.state === 'breakout_support' || cup?.state === 'breakout_extended';
 
     // Phase2 task3 (案A×G2 gate): レベルを 11→7 に蒸留 (落とす: ext25/ext15/sma200/low52)。
     // pivot/support = Premium 固有 (cup_handle 由来)。 premium:true → isLocked で値ロック (• • •)。
@@ -285,7 +289,7 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
       { key: 'current', label: '現在価格', price: current, isCurrent: true },
       { key: 'sma50', label: '50日移動平均', price: sma50 },
       { key: 'support', label: supportLabel, price: support, premium: true },
-      { key: 'stop', label: 'リスク確認ライン (現在−8%)', price: stop },
+      { key: 'stop', label: 'リスク確認ライン (買値−8%)', price: isBreakoutConfirmed ? stop : null },
     ].filter((l) => Number.isFinite(l.price));
     raw.sort((a, b) => b.price - a.price);
 
@@ -324,7 +328,7 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
       ? Number(prices[prices.length - 1]?.volume) : NaN;
     const volRatio = computeVolRatio(todayVol, avgVol50Pl);
 
-    return { levels: raw, current, sma50Dist, distCount, stateText, volRatio };
+    return { levels: raw, current, sma50Dist, distCount, stateText, volRatio, pivot, isBreakoutConfirmed };
   }, [analyst, technical, priceData, ticker]);
 
   // loading: CLS envelope (minHeight) + skeleton
@@ -512,7 +516,17 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
           );
         };
 
-        const currentRow = (l, extra = null) => (
+        const currentRow = (l, extra = null) => {
+          // round13 (v6 「余地」 callout): 現在価格の直下に「ブレイク確認/損切り」 の余地を §38-safe に提示。
+          //   - ブレイクまでの距離は pivot (Premium 固有) からの逆算になるため、 free は値を出さず 🔒 のみ
+          //     (premium は実距離)。 矢印は使わない (本 component の §38 規律: 行動示唆の矢印 BAN)。
+          //   - 損切り 買値−8% は breakout 確認状態でのみ (累進開示。 監視中の現在値基準 −8% は押し目買い誘発)。
+          const pivotLevel = levels.find((lv) => lv.key === 'pivot');
+          const pivotLocked = pivotLevel ? isLocked(pivotLevel) : false;
+          const preBreakoutUp = Number.isFinite(pivot) && Number.isFinite(current) && current < pivot;
+          const pivotDistPct = preBreakoutUp ? (pivot / current - 1) * 100 : null;
+          const showRoom = preBreakoutUp || isBreakoutConfirmed;
+          return (
           <div
             key={l.key}
             data-testid={`price-ladder-row-${l.key}`}
@@ -553,8 +567,31 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
                 </span>
               </span>
             </div>
+            {showRoom && (
+              <div
+                data-testid="price-ladder-room"
+                style={{ paddingLeft: 'var(--space-5, 20px)', marginTop: 2, display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3, 12px)', fontSize: 10, lineHeight: 1.3 }}
+              >
+                {preBreakoutUp && (
+                  <span style={{ color: 'var(--text-secondary)' }}>
+                    ブレイク確認まで{' '}
+                    {pivotLocked ? (
+                      <span style={{ color: 'var(--color-gold-dark)', fontWeight: 700 }}>
+                        <span aria-hidden="true">🔒 </span>Premium
+                      </span>
+                    ) : (
+                      <b style={{ color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{fmtPct(pivotDistPct)}</b>
+                    )}
+                  </span>
+                )}
+                {isBreakoutConfirmed && (
+                  <span style={{ color: 'var(--color-warning)' }}>損切り目安 買値 −8%</span>
+                )}
+              </div>
+            )}
           </div>
-        );
+          );
+        };
 
         return (
           <div
@@ -648,6 +685,57 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
                 Premium を見る
               </button>
             )}
+          </div>
+        );
+      })()}
+      {/* v6 ブレイク確認 出来高ゲージ: O'Neil +40% (×1.40) を「未確認/確認」 で可視化。
+          §38: 達成 (×1.40 到達) のみ gain 色 (過去の確定事実 polarity)、 未達は中立 muted。 文言は事実記述のみ
+          (「買い場/急増/ブレイクだ」 等の断定・将来予測は使わない)。 gate: cup pivot がある (ブレイク文脈) かつ
+          volRatio が有限 (非株式/データ不足は自動非表示) のときのみ。 volRatio は上の useMemo で算出済 (追加 fetch 0)。 */}
+      {Number.isFinite(pivot) && Number.isFinite(volRatio) && (() => {
+        const VOL_THRESHOLD = 1.40; // O'Neil ブレイク確認の出来高 (+40%)
+        const SCALE_MAX = 1.6;      // ゲージ右端
+        const achieved = volRatio >= VOL_THRESHOLD;
+        const fillPct = Math.min(volRatio / SCALE_MAX, 1) * 100;
+        const thrPct = (VOL_THRESHOLD / SCALE_MAX) * 100;
+        return (
+          <div
+            data-testid="price-ladder-volgauge"
+            style={{ marginTop: 'var(--space-4, 16px)', paddingTop: 'var(--space-3, 12px)', borderTop: '1px solid var(--border)' }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 22 }}>
+              ブレイク確認の出来高（+40% 基準）
+            </div>
+            <div style={{ position: 'relative', height: 16, borderRadius: 8, background: 'var(--bg-muted)', border: '1px solid var(--border)' }}>
+              <div style={{
+                position: 'absolute', left: 0, top: 0, bottom: 0, width: `${fillPct}%`, borderRadius: '8px 0 0 8px',
+                background: achieved
+                  ? 'color-mix(in srgb, var(--color-gain) 55%, transparent)'
+                  : 'color-mix(in srgb, var(--text-muted) 70%, transparent)',
+              }} />
+              <div style={{ position: 'absolute', top: -4, bottom: -4, left: `${fillPct}%`, width: 2, background: 'var(--text-primary)', borderRadius: 2 }} />
+              <span style={{
+                position: 'absolute', top: -23, left: `${fillPct}%`, transform: 'translateX(-50%)',
+                fontSize: 10, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums',
+                background: 'var(--bg-muted)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 6px',
+              }}>×{volRatio.toFixed(2)}</span>
+              <div style={{ position: 'absolute', top: -3, bottom: -3, left: `${thrPct}%`, width: 2, background: 'var(--color-gain)', borderRadius: 2 }} />
+              <span style={{
+                position: 'absolute', top: -23, left: `${thrPct}%`, transform: 'translateX(-50%)',
+                fontSize: 9, color: 'var(--color-gain)', whiteSpace: 'nowrap',
+                background: 'color-mix(in srgb, var(--color-gain) 10%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--color-gain) 35%, transparent)', borderRadius: 4, padding: '1px 6px',
+              }}>+40% 基準</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: 'var(--text-muted)', marginTop: 6 }}>
+              <span>×0</span><span>×0.5</span><span>×1.0</span><span>×1.6</span>
+            </div>
+            <p style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 8, lineHeight: 1.5 }}>
+              {achieved
+                ? '出来高は +40% 基準に到達しています（過去の確定値）。'
+                : '出来高は +40% 基準に未到達です（現時点でブレイクは確認できていません）。'}
+              {' '}有効なブレイクは <b style={{ color: 'var(--text-secondary)' }}>「買い目安 pivot を上抜け」かつ「出来高 +40%」</b> の両方が必要です。
+            </p>
           </div>
         );
       })()}

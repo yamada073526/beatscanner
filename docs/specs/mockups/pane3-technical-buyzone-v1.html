@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="dark">
+<head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>§③ テクニカル・買い場 — 価格機能 改修モックアップ v1（買い場マップ × R/R × ゾーン帯）</title>
+<style>
+  :root{
+    --bg-primary:#0f172a;--bg-card:#1e2433;--bg-subtle:#1e2a3a;--bg-muted:#243447;--bg-hover:#253045;
+    --text-primary:#f1f5f9;--text-secondary:#cbd5e1;--text-muted:#94a3b8;--border:#334155;--border-strong:rgba(255,255,255,.14);
+    --gain:#34ef81;--loss:#f87171;--warning:#f59e0b;--accent:#38bdf8;--gold:#d4af37;--radius-sm:8px;--radius-md:12px;--radius-lg:16px;
+    --glow-cyan:0 0 0 1px rgba(56,189,248,.30),0 8px 32px rgba(56,189,248,.20);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg-primary);color:var(--text-primary);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;font-feature-settings:"tnum";-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:760px;margin:0 auto;padding:22px 22px 80px;}
+  .legend{font-size:12px;color:var(--text-muted);margin:0 0 18px;padding:10px 14px;background:var(--bg-subtle);border:1px dashed var(--border);border-radius:var(--radius-sm);line-height:1.7;}
+  .legend b{color:var(--text-secondary);} .legend .k{color:var(--gold);font-weight:700;}
+  .muted{color:var(--text-muted);} .small{font-size:11px;}
+
+  .chapter-h{display:flex;align-items:center;gap:10px;margin:6px 0 12px;}
+  .chapter-h .no{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--gold);background:rgba(212,175,55,.12);border:1px solid rgba(212,175,55,.3);}
+  .chapter-h .ti{font-size:17px;font-weight:700;letter-spacing:-.01em;}
+  .panel{background:var(--bg-card);border:1px solid var(--border);border-top:2px solid color-mix(in srgb,var(--gold) 30%,var(--border));border-radius:var(--radius-lg);padding:18px;margin-bottom:14px;}
+
+  /* ── chart 帯（文脈・v5 踏襲・簡略）── */
+  .ctop{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+  .cchip{font-size:11px;border-radius:6px;padding:3px 9px;border:1px solid var(--border);color:var(--text-secondary);}
+  .cchip.px{font-weight:700;color:var(--text-primary);border-color:var(--border-strong);}
+  .cchip.cup{color:var(--warning);border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.1);}
+  .cchip.gc{color:var(--gain);border-color:rgba(52,239,129,.4);} .cchip.rs{color:var(--accent);border-color:rgba(56,189,248,.4);}
+  .pro-tag{font-size:9px;font-weight:700;color:var(--gold);background:rgba(212,175,55,.14);border:1px solid rgba(212,175,55,.3);border-radius:5px;padding:0 5px;margin-left:4px;}
+  .ctools{margin-left:auto;display:flex;gap:5px;align-items:center;}
+  .ctools .tg{font-size:11px;border:1px solid var(--border);border-radius:6px;padding:3px 8px;color:var(--text-secondary);}
+  .periods{display:flex;gap:4px;} .periods .p{font-size:11px;color:var(--text-secondary);border:1px solid var(--border);border-radius:6px;padding:3px 8px;}
+  .periods .p.on{background:var(--accent);color:var(--bg-primary);border-color:var(--accent);font-weight:600;}
+  .chartbox{position:relative;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-subtle);padding:12px 14px;}
+  .ind{display:flex;gap:14px;margin-top:10px;font-size:11px;color:var(--text-muted);flex-wrap:wrap;} .ind .i{display:flex;align-items:center;gap:6px;} .ind .sw{width:14px;height:3px;border-radius:2px;}
+
+  /* ── 価格ユニット ── */
+  .pl{margin-top:18px;}
+  .pl-head{display:flex;align-items:baseline;gap:8px;margin-bottom:10px;}
+  .pl-label{font-size:13px;font-weight:700;letter-spacing:.03em;color:var(--gold);text-transform:uppercase;}
+  .pl-label .en{color:var(--text-muted);font-weight:500;letter-spacing:0;text-transform:none;font-size:11px;margin-left:6px;}
+  .pl-label .info{color:var(--text-muted);font-weight:400;font-size:11px;margin-left:6px;cursor:help;}
+
+  /* ★改善1: 買い場ステータス見出し（2秒 anchor） */
+  .bz-verdict{display:flex;align-items:flex-start;gap:10px;background:linear-gradient(90deg,color-mix(in srgb,var(--gold) 9%,transparent),transparent);
+    border:1px solid color-mix(in srgb,var(--gold) 26%,var(--border));border-left:3px solid var(--gold);border-radius:var(--radius-sm);padding:11px 13px;margin-bottom:12px;}
+  .bz-verdict .pos{flex:0 0 auto;font-size:11.5px;font-weight:700;color:var(--gold);background:rgba(212,175,55,.14);border:1px solid rgba(212,175,55,.32);border-radius:999px;padding:3px 11px;white-space:nowrap;}
+  .bz-verdict .fact{font-size:12.5px;color:var(--text-secondary);line-height:1.5;} .bz-verdict .fact b{color:var(--text-primary);}
+
+  /* ★改善2: リスク/リワード一目グリッド */
+  .bz-rr{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;margin-bottom:14px;}
+  .rrc{border:1px solid var(--border);border-radius:var(--radius-md);padding:11px 13px;background:var(--bg-subtle);}
+  .rrc .k{font-size:10.5px;color:var(--text-muted);display:flex;align-items:center;gap:5px;margin-bottom:5px;}
+  .rrc .v{font-size:21px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1;}
+  .rrc .v.up{color:var(--gain);} .rrc .v.dn{color:var(--loss);}
+  .rrc .s{font-size:10px;color:var(--text-muted);margin-top:4px;}
+  .rrc.ratio{display:flex;flex-direction:column;justify-content:center;align-items:center;background:transparent;border-style:dashed;min-width:96px;}
+  .rrc.ratio .k{justify-content:center;} .rrc.ratio .v{font-size:18px;color:var(--text-primary);} .rrc.ratio .v .x{font-size:11px;color:var(--text-muted);font-weight:500;}
+
+  .pl-status{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;font-size:11.5px;color:var(--text-secondary);}
+  .pl-status .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);flex:0 0 auto;}
+  .pl-status .plchip{margin-left:auto;font-size:10.5px;color:var(--text-muted);border:1px solid var(--border);border-radius:999px;padding:3px 9px;white-space:nowrap;}
+  .pl-status .plchip + .plchip{margin-left:0;}
+
+  /* spine axis（v5 踏襲 + ★改善3: ゾーン名ラベル & 買い目安レンジ帯） */
+  .axis{position:relative;height:356px;margin:4px 0 2px;padding:6px 0;}
+  .axis .rail{position:absolute;left:188px;top:8px;bottom:8px;width:2px;border-radius:2px;
+    background:linear-gradient(180deg,rgba(52,239,129,.42),rgba(56,189,248,.30) 52%,rgba(248,113,113,.40));}
+  .axis .zone{position:absolute;left:182px;width:14px;border-radius:7px;}
+  .axis .zone.up{background:var(--accent);opacity:.08;}
+  .axis .zone.buy{background:var(--gold);opacity:.16;box-shadow:0 0 0 1px color-mix(in srgb,var(--gold) 30%,transparent);}
+  .axis .zone.dn{background:var(--loss);opacity:.09;}
+  .axis .zlab{position:absolute;left:206px;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;}
+  .axis .zlab.up{color:var(--accent);opacity:.8;} .axis .zlab.buy{color:var(--gold);} .axis .zlab.dn{color:var(--loss);opacity:.8;}
+  .lv{position:absolute;left:0;right:0;height:0;}
+  .lv .tick{position:absolute;left:180px;width:18px;height:1px;background:var(--border-strong);}
+  .lv .lab{position:absolute;right:calc(100% - 176px);text-align:right;width:176px;padding-right:14px;font-size:11.5px;color:var(--text-secondary);line-height:1.25;}
+  .lv .lab .sub{display:block;font-size:9px;color:var(--text-muted);}
+  .lv .val{position:absolute;left:208px;font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--text-primary);}
+  .lv .dist{margin-left:8px;font-size:10.5px;color:var(--text-muted);font-variant-numeric:tabular-nums;}
+  .lv.up .dist{color:var(--gain);} .lv.dn .dist{color:var(--loss);}
+  .lv .lock{margin-left:6px;font-size:9px;color:var(--gold);}
+  .lv.locked .val{color:var(--text-muted);letter-spacing:.12em;}
+  .lv.locked .tick{background:var(--border);}
+  .lv.now .dot{position:absolute;left:183px;width:14px;height:14px;border-radius:50%;background:var(--accent);box-shadow:var(--glow-cyan);transform:translateX(-1px);}
+  .lv.now .lab{font-size:12.5px;color:var(--accent);font-weight:700;}
+  .lv.now .val{font-size:15px;font-weight:700;color:var(--accent);}
+  .lv.now .spark{position:absolute;left:300px;display:flex;align-items:flex-end;gap:2px;height:14px;}
+  .lv.now .spark i{width:3px;background:rgba(56,189,248,.55);border-radius:1px;}
+
+  .pl-teaser{margin-top:12px;display:flex;align-items:center;gap:10px;border:1px dashed var(--gold);border-radius:var(--radius-sm);padding:10px 13px;background:rgba(212,175,55,.06);}
+  .pl-teaser .lk{font-size:13px;} .pl-teaser .tx{font-size:11.5px;color:var(--text-secondary);line-height:1.5;} .pl-teaser .tx b{color:var(--gold);}
+  .pl-teaser .cta{margin-left:auto;font-size:11px;font-weight:700;color:var(--bg-primary);background:var(--gold);border-radius:6px;padding:5px 12px;white-space:nowrap;}
+
+  .disc{font-size:10.5px;color:var(--text-muted);margin-top:12px;line-height:1.55;}
+
+  /* ★改善4: ブレイクアウト強度ゲージ */
+  .bo{margin-top:18px;padding-top:14px;border-top:1px solid var(--border);}
+  .bo .h{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:9px;}
+  .bo .h .t{font-size:12px;font-weight:600;color:var(--text-secondary);} .bo .h .now{font-size:11px;color:var(--text-muted);font-variant-numeric:tabular-nums;}
+  .bo .gauge{position:relative;height:12px;border-radius:7px;background:var(--bg-muted);border:1px solid var(--border);overflow:visible;}
+  .bo .fill{position:absolute;left:0;top:0;bottom:0;border-radius:7px 0 0 7px;background:linear-gradient(90deg,rgba(148,163,184,.5),var(--text-muted));}
+  .bo .thr{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--gain);border-radius:2px;}
+  .bo .thrlab{position:absolute;top:-18px;transform:translateX(-50%);font-size:9px;color:var(--gain);white-space:nowrap;}
+  .bo .scale{display:flex;justify-content:space-between;font-size:9px;color:var(--text-muted);margin-top:5px;}
+  .bo .note{font-size:11px;color:var(--text-secondary);margin-top:8px;} .bo .note b{color:var(--text-primary);}
+
+  /* 期間別リターン（v5 踏襲） */
+  .ret-sec{margin-top:18px;padding-top:14px;border-top:1px solid var(--border);}
+  .ret-sec .pl-label{color:var(--text-secondary);}
+  .ret-term{margin-top:10px;} .ret-term:first-of-type{margin-top:8px;}
+  .ret-term .tl{font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;}
+  .retgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+  .retgrid .rc{border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center;background:var(--bg-subtle);}
+  .retgrid .rk{font-size:10px;color:var(--text-muted);} .retgrid .rv{font-size:14px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums;}
+
+  /* 完全性台帳 quiet（v5 踏襲） */
+  .comp{margin-top:16px;border:none;background:transparent;}
+  .comp>summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;padding:2px 0;}
+  .comp>summary::-webkit-details-marker{display:none;}
+  .comp .eyebrow{font-size:8px;font-weight:600;letter-spacing:.08em;color:var(--text-muted);text-transform:uppercase;}
+  .comp .rolltext{font-size:10.5px;font-weight:500;color:var(--text-muted);}
+  .comp .cchev{margin-left:auto;font-size:11px;color:var(--text-muted);transition:transform .15s;} .comp[open] .cchev{transform:rotate(90deg);}
+  .comp-panel{margin-top:10px;background:var(--bg-subtle);border:1px solid var(--border);border-radius:8px;padding:12px 14px;}
+  .comp-row{display:flex;align-items:center;gap:8px;border-left:1px solid var(--border);padding:4px 0 4px 10px;font-size:12.5px;color:var(--text-secondary);}
+  .comp-row .st{margin-left:auto;font-size:11px;color:var(--text-muted);} .comp-row .st.ok::before{content:"●";color:var(--gain);opacity:.5;margin-right:4px;font-size:8px;vertical-align:middle;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="legend">
+    <b>§③ テクニカル・買い場 — 価格機能 改修モックアップ v1</b>（正本 = v5 を進化）<br>
+    <span class="k">改善1</span> 買い場ステータス見出し（押し目/上値/警戒 を1語＋事実1文で 2 秒提示）／
+    <span class="k">改善2</span> リスク/リワード一目グリッド（上値余地・下値リスク・R/R 比＝手計算の肩代わり）／
+    <span class="k">改善3</span> 価格ラダーにゾーン名ラベル＋<b>買い目安レンジ帯</b>（Pivot〜損切りを gold 帯・現在地が帯内に入る）／
+    <span class="k">改善4</span> ブレイクアウト強度をテキスト→<b>ゲージ図</b>（出来高 vs O'Neil +40%）。<br>
+    G2 gate（Premium ロック）・期間別リターン・完全性台帳は v5 踏襲。数値は全てサンプル（NVDA 想定）。<span class="muted">§38 配慮で「買え/売れ」断定はせず「目安・参考」に限定。</span>
+  </div>
+
+  <!-- 章扉 -->
+  <div class="chapter-h"><span class="no">③</span><span class="ti">テクニカル・買い場</span></div>
+
+  <div class="panel">
+    <!-- chart 帯（文脈・簡略） -->
+    <div class="ctop">
+      <span class="cchip px">現在 $192.53</span>
+      <span class="cchip cup">取っ手付きカップ 形成中<span class="pro-tag">Premium</span></span>
+      <span class="cchip gc">ゴールデンクロス</span>
+      <span class="cchip rs">RS 50</span>
+      <span class="ctools"><span class="tg">線 / ローソク</span><span class="periods"><span class="p">1M</span><span class="p on">3M</span><span class="p">6M</span><span class="p">1Y</span><span class="p">5Y</span></span></span>
+    </div>
+    <div class="chartbox">
+      <svg viewBox="0 0 700 180" width="100%" height="150" preserveAspectRatio="none">
+        <defs><linearGradient id="ar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#38bdf8" stop-opacity=".22"/><stop offset="1" stop-color="#38bdf8" stop-opacity="0"/></linearGradient></defs>
+        <line x1="0" y1="40" x2="700" y2="40" stroke="#38bdf8" stroke-dasharray="5 4" stroke-width="1" opacity=".55"/>
+        <line x1="0" y1="78" x2="700" y2="78" stroke="#d4af37" stroke-dasharray="4 4" stroke-width="1" opacity=".6"/>
+        <line x1="0" y1="150" x2="700" y2="150" stroke="#f87171" stroke-dasharray="2 4" stroke-width="1" opacity=".5"/>
+        <path d="M0,130 L60,120 L120,60 L180,95 L240,120 L300,130 L360,128 L420,100 L480,80 L520,72 L580,84 L640,76 L700,88 L700,180 L0,180 Z" fill="url(#ar)"/>
+        <path d="M0,130 L60,120 L120,60 L180,95 L240,120 L300,130 L360,128 L420,100 L480,80 L520,72 L580,84 L640,76 L700,88" fill="none" stroke="#38bdf8" stroke-width="2"/>
+        <path d="M0,118 L350,104 L700,92" fill="none" stroke="#f59e0b" stroke-width="1.3" opacity=".8"/>
+        <circle cx="520" cy="72" r="3.5" fill="#34ef81"/>
+      </svg>
+      <div class="ind" style="margin-top:8px;">
+        <div class="i"><span class="sw" style="background:#38bdf8;"></span>株価</div>
+        <div class="i"><span class="sw" style="background:#f59e0b;"></span>SMA 50</div>
+        <div class="i"><span class="sw" style="background:#d4af37;"></span>買い目安 Pivot</div>
+        <div class="i"><span class="sw" style="background:#34ef81;"></span>決算日（Beat=緑/Miss=赤）</div>
+      </div>
+    </div>
+
+    <!-- ◆ 価格ユニット -->
+    <div class="pl">
+      <div class="pl-head">
+        <div class="pl-label">買い場の目安<span class="en">— 価格ラダー</span><span class="info">ⓘ</span></div>
+      </div>
+
+      <!-- ★改善1: 買い場ステータス -->
+      <div class="bz-verdict">
+        <span class="pos">押し目の目安圏</span>
+        <span class="fact">現在価格は<b>買い目安 Pivot の約 11% 下</b>・<b>50日線の上</b>で推移。コンセンサス目標まで上値余地、損切り目安まで下値リスクは下記。</span>
+      </div>
+
+      <!-- ★改善2: リスク/リワード -->
+      <div class="bz-rr">
+        <div class="rrc">
+          <div class="k">▲ 上値余地<span class="muted">（目標まで）</span></div>
+          <div class="v up">+60.0%</div>
+          <div class="s">コンセンサス目標 $308.00・n=74</div>
+        </div>
+        <div class="rrc">
+          <div class="k">▼ 下値リスク<span class="muted">（損切り目安まで）</span></div>
+          <div class="v dn">−8.0%</div>
+          <div class="s">リスク確認ライン $177.13（現在−8%）</div>
+        </div>
+        <div class="rrc ratio">
+          <div class="k">R / R 比<span class="muted">（目安）</span></div>
+          <div class="v">7.5<span class="x"> : 1</span></div>
+        </div>
+      </div>
+
+      <div class="pl-status">
+        <span class="dot"></span>
+        <span class="fact">取っ手付きカップ形成中・出来高は基準未満。</span>
+        <span class="plchip">地合い: Distribution 3 / 25日</span>
+        <span class="plchip">出来高 50日平均比 ×0.92</span>
+      </div>
+
+      <!-- spine axis -->
+      <div class="axis">
+        <div class="rail"></div>
+        <!-- ゾーン帯（★改善3） -->
+        <div class="zone up"  style="top:8px;height:128px;"></div>
+        <div class="zone buy" style="top:150px;height:158px;"></div>
+        <div class="zone dn"  style="top:316px;bottom:8px;"></div>
+        <div class="zlab up"  style="top:80px;">上値余地</div>
+        <div class="zlab buy" style="top:233px;">買い目安レンジ</div>
+        <div class="zlab dn"  style="top:328px;">警戒</div>
+
+        <!-- levels（上→下） -->
+        <div class="lv up" style="top:14px;"><span class="tick"></span>
+          <span class="lab">アナリスト目標<span class="sub">consensus n=74</span></span>
+          <span class="val">$308.00<span class="dist">+60.0%</span></span></div>
+
+        <div class="lv up locked" style="top:150px;"><span class="tick"></span>
+          <span class="lab">買い目安 Pivot<span class="sub">取っ手付きカップ</span></span>
+          <span class="val">• • •<span class="lock">🔒 Premium</span></span></div>
+        <div class="lv up" style="top:176px;"><span class="tick"></span>
+          <span class="lab">52週高値</span>
+          <span class="val">$212.19<span class="dist">+10.2%</span></span></div>
+
+        <div class="lv now" style="top:214px;"><span class="dot"></span><span class="tick" style="background:var(--accent);"></span>
+          <span class="lab">現在価格<span class="sub">当日</span></span>
+          <span class="val">$192.53</span>
+          <span class="spark"><i style="height:40%"></i><i style="height:65%"></i><i style="height:45%"></i><i style="height:80%"></i><i style="height:55%"></i><i style="height:70%"></i></span></div>
+
+        <div class="lv dn" style="top:252px;"><span class="tick"></span>
+          <span class="lab">50日移動平均</span>
+          <span class="val">$185.00<span class="dist">−3.9%</span></span></div>
+        <div class="lv dn locked" style="top:278px;"><span class="tick"></span>
+          <span class="lab">支持線目安<span class="sub">box support</span></span>
+          <span class="val">• • •<span class="lock">🔒</span></span></div>
+        <div class="lv dn locked" style="top:304px;"><span class="tick"></span>
+          <span class="lab">リスク確認 −8%</span>
+          <span class="val">• • •<span class="lock">🔒</span></span></div>
+      </div>
+
+      <!-- Premium ティーザー（G2 gate） -->
+      <div class="pl-teaser">
+        <span class="lk">🔒</span>
+        <span class="tx"><b>買い目安 Pivot・支持線・リスク確認 −8%</b> は Premium で開放。取っ手付きカップの買い点と損切り基準を数値で。</span>
+        <span class="cta">Premium を見る</span>
+      </div>
+
+      <p class="disc">※ 各価格は目安です。テクニカル分析は将来の値動きを保証するものではありません。R/R 比は上値余地と損切り目安の距離比（目安）で、売買の推奨ではありません。</p>
+    </div>
+
+    <!-- ★改善4: ブレイクアウト強度ゲージ -->
+    <div class="bo">
+      <div class="h"><span class="t">ブレイクアウト強度（参考）</span><span class="now">出来高 50日平均比 ×0.92</span></div>
+      <div class="gauge">
+        <div class="fill" style="width:61%;"></div>
+        <div class="thr" style="left:93%;"></div>
+        <div class="thrlab" style="left:93%;transform:translateX(-100%);padding-right:6px;">O'Neil 目安 +40% ›</div>
+      </div>
+      <div class="scale"><span>×0</span><span>×0.5</span><span>×1.0</span><span>×1.5</span></div>
+      <div class="note">現在の出来高は<b>ブレイク目安（×1.40）に未到達</b>。仕掛けの出来高増は確認できていません。</div>
+    </div>
+
+    <!-- 期間別リターン（v5 踏襲） -->
+    <div class="ret-sec">
+      <div class="pl-label">期間別リターン<span class="en">— 騰落率</span></div>
+      <div class="ret-term">
+        <div class="tl">短期</div>
+        <div class="retgrid">
+          <div class="rc"><div class="rk">1W</div><div class="rv" style="color:var(--loss)">−8.6%</div></div>
+          <div class="rc"><div class="rk">1M</div><div class="rv" style="color:var(--loss)">−8.8%</div></div>
+          <div class="rc"><div class="rk">3M</div><div class="rv" style="color:var(--gain)">+14.9%</div></div>
+          <div class="rc"><div class="rk">6M</div><div class="rv" style="color:var(--gain)">+28.4%</div></div>
+        </div>
+      </div>
+      <div class="ret-term">
+        <div class="tl">長期</div>
+        <div class="retgrid">
+          <div class="rc"><div class="rk">1Y</div><div class="rv" style="color:var(--gain)">+22.1%</div></div>
+          <div class="rc"><div class="rk">3Y</div><div class="rv" style="color:var(--gain)">+212%</div></div>
+          <div class="rc"><div class="rk">5Y</div><div class="rv" style="color:var(--gain)">+1,180%</div></div>
+          <div class="rc"><div class="rk">10Y</div><div class="rv" style="color:var(--gain)">+9,640%</div></div>
+        </div>
+      </div>
+      <p class="disc" style="margin-top:10px;">価格ベース・分配金含まず</p>
+    </div>
+
+    <!-- 完全性台帳 quiet（v5 踏襲・§③ 末尾） -->
+    <details class="comp">
+      <summary>
+        <span class="eyebrow">データ取得</span>
+        <span class="rolltext">決算・地合い・価格の元データを取得済み（1件は非該当）</span>
+        <span class="cchev">▸</span>
+      </summary>
+      <div class="comp-panel">
+        <div class="comp-row">価格・移動平均・出来高<span class="st ok">取得済み</span></div>
+        <div class="comp-row">RS / 地合い（Distribution Days）<span class="st ok">取得済み</span></div>
+        <div class="comp-row">来期ガイダンス<span class="st">非該当（未開示）</span></div>
+      </div>
+    </details>
+  </div>
+</div>
+</body>
+</html>
