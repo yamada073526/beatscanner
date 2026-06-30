@@ -21090,6 +21090,11 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
             # 単調増加判定: cfps_3y_rising (free tier)。CFPS (営業CF/希薄化株式数) annual 4 期連続増加。
             # None = 履歴不足（False と区別）。gate 化は次セッション (populate 確認後)。
             "cfps_3y_rising": (sf or {}).get("cfps_3y_rising"),
+            # 条件5 CFPS>EPS (cfps_eps_ratio): 直近年 CFPS/EPS 比 (>1.0 で達成・利益の質指標、free tier)。
+            # None = 判定不能 (sector guard 金融/REIT・外貨ADR・EPS≤0 clamp・データ欠落)。frontend で南京錠フィルタ。
+            # ★ PR#141 で sf_map merge (L20907) / freshness (L20860) は追加したが本 item 構築への明示コピーを
+            #   漏らし、universe payload の item に key 自体が載らず frontend が常時 0 件 (Trust Cliff) になっていた修正。
+            "cfps_eps_ratio": (sf or {}).get("cfps_eps_ratio"),
             # ── 決算速報ハイブリッド Sprint 2 (SPEC §13): 新7フィールド (free tier・None-preserve) ──
             # 数値は _uni_round 経由、text (rev_beat/eps_beat/tri_verdict) は .get() 直返し。
             # sector-gate / ADR 抑止 / EPS sanity bound は _compute_one 内で適用済 (None 保存)。
