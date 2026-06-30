@@ -54,6 +54,7 @@ import { DetailInstanceTickerContext } from '../../primitives/DetailInstanceTick
 // Forward P/E / PEG / 配当性向 / Buyback比率 を KpiStrip に追加するための fetcher。
 // 金商法 §38 / 景表法 §5 配慮で narration / 警告 chip なし、 数値のみ。
 import { fetchValuationExtras, fetchTechnical, TECHNICAL_CANONICAL_PATTERNS } from '../../../../api.js';
+import { classifyBuyZone } from '../../../../lib/buyZoneLabels.js';
 // Phase G Phase 3 (handover v99 §0-D): ChapterSection — 章 2-5 用 generic 章扉 (Noto Serif JP / gold hairline)。
 // headerOnly mode で content 再配置せず brand 一貫性 ([[feedback-gold-accent-continuity]]) を実現。
 // v118 ETF MVP: ETF 入力時は 5 条件適用外 → EtfOverviewPanel を render (Trust Cliff 防止)。
@@ -393,7 +394,11 @@ export default function JudgmentDetail({
       .then((t) => {
         if (cancelled) return;
         setTechnicalRs(t?.patterns?.rs || null);
-        setCupState(t?.patterns?.cup_handle?.state || null);
+        // raw cup_handle.state (formation/breakout_confirmed...) を classifyBuyZone で
+        // 正規化 enum (cup_pivot/breakout_support...) に変換してから VERDICT_TONE に渡す。
+        // raw のまま渡すと VERDICT_TONE のキーと噛み合わず verdict bar が出ない (v305 配線バグ修正)。
+        const zone = classifyBuyZone(t?.patterns?.cup_handle?.state);
+        setCupState(zone && zone !== 'unknown' ? zone : null);
       })
       .catch(() => { if (!cancelled) { setTechnicalRs(null); setCupState(null); } });
     return () => { cancelled = true; };
