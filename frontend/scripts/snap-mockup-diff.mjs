@@ -20,9 +20,15 @@ if (!cfgPath) { console.error('usage: node scripts/snap-mockup-diff.mjs <config.
 const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
 
 const FIELDS = ['boxShadow', 'color', 'backgroundColor', 'borderColor', 'borderRadius', 'fontSize',
-  'fontWeight', 'lineHeight', 'letterSpacing', 'paddingTop', 'paddingLeft', 'gap', 'transitionDuration',
-  'transitionDelay', 'transform', 'zIndex', 'position', 'overflow'];
-const NUMERIC = { borderRadius: 1, fontSize: 0.5, lineHeight: 1, letterSpacing: 0.5, paddingTop: 1, paddingLeft: 1, gap: 1 };
+  'fontWeight', 'lineHeight', 'letterSpacing', 'paddingTop', 'paddingLeft', 'paddingRight', 'paddingBottom',
+  'gap', 'transitionDuration', 'transitionDelay', 'transform', 'zIndex', 'position', 'overflow',
+  // v306 拡充: layout / 枠 / 間隔系。期間別リターン grid 列数・カード枠 (border)・中央寄せ等、
+  //   従来 FIELDS では取れず目視に頼って見落とした drift を機械検出する (mockup-fidelity 見落とし防止)。
+  'display', 'flexDirection', 'flexWrap', 'justifyContent', 'alignItems', 'textAlign',
+  'gridTemplateColumns', 'borderWidth', 'borderStyle', 'borderTopWidth', 'borderTopColor',
+  'marginTop', 'marginBottom', 'opacity'];
+const NUMERIC = { borderRadius: 1, fontSize: 0.5, lineHeight: 1, letterSpacing: 0.5, paddingTop: 1, paddingLeft: 1,
+  paddingRight: 1, paddingBottom: 1, gap: 1, borderWidth: 0.5, borderTopWidth: 0.5, marginTop: 1, marginBottom: 1, opacity: 0.04 };
 
 // color(srgb r g b / a) / rgb() / rgba() を canonical rgba(R,G,B,A.aaa) へ正規化
 function normColors(str) {
@@ -52,14 +58,19 @@ function diff(field, mv, pv) {
     const f = (s) => parseFloat(s) || 0;
     return Math.abs(f(mv) - f(pv)) <= 0.011; // ±11ms (GC ジッター吸収)
   }
+  if (field === 'gridTemplateColumns') {
+    // px 値は container 幅依存でノイズ → 列「数」で比較 (期間別リターン 4 列等の構造 drift を捕捉)。
+    const cols = (s) => (s && s !== 'none' ? s.trim().split(/\s+/).length : 0);
+    return cols(mv) === cols(pv);
+  }
   if (field in NUMERIC) return Math.abs((parseFloat(mv) || 0) - (parseFloat(pv) || 0)) <= NUMERIC[field];
   if (field === 'zIndex') return mv === pv;
   return normColors(mv) === normColors(pv); // color/box-shadow/position/overflow/fontWeight
 }
 
-async function measure(page, sel, state) {
+async function measure(page, sel, state, mt) {
   const el = page.locator(sel).first();
-  await el.waitFor({ timeout: 10000 });
+  await el.waitFor({ timeout: mt || 10000 });
   if (state === 'hover') await el.hover();
   else if (state === 'focus') await el.evaluate((n) => n.focus && n.focus());
   const dur = await el.evaluate((n) => parseFloat(getComputedStyle(n).transitionDuration) || 0);
@@ -88,15 +99,28 @@ try {
     const pctx = await browser.newContext({ viewport: { width: vw, height: 1200 }, reducedMotion: 'no-preference', extraHTTPHeaders: { 'Cache-Control': 'no-cache' } });
     if (auth) await pctx.addInitScript((e) => { for (const { key, value } of e) localStorage.setItem(key, value); }, auth);
     const ppage = await pctx.newPage();
-    await ppage.goto(cfg.prodUrl, { waitUntil: 'networkidle', timeout: 25000 }).catch(() => {});
+    await ppage.goto(cfg.prodUrl, { waitUntil: (cfg.prodWaitUntil || 'networkidle'), timeout: 25000 }).catch(() => {});
+
+    // v306: prod 側の到達操作 (accordion 展開 / scroll / wait)。workspace ペインで折りたたみ要素を
+    //   測るため (snap-mockup-diff を §③ 等の embedded 画面へ汎用適用)。失敗は pair の waitFor で顕在化。
+    for (const act of (cfg.prodActions || [])) {
+      try {
+        if (act.wait) { await ppage.waitForTimeout(act.wait); continue; }
+        const loc = ppage.locator(act.sel).first();
+        if (act.action === 'clickIfCollapsed') {
+          if ((await loc.getAttribute('aria-expanded').catch(() => null)) === 'false') { await loc.click(); await ppage.waitForTimeout(act.after || 900); }
+        } else if (act.action === 'click') { await loc.click(); await ppage.waitForTimeout(act.after || 600); }
+        else if (act.action === 'scroll') { await loc.scrollIntoViewIfNeeded(); await ppage.waitForTimeout(act.after || 600); }
+      } catch (e) { /* noop: pair measure の waitFor で検出 */ }
+    }
 
     for (const pair of cfg.pairs) {
       if (pair.sentinel) await ppage.waitForFunction(pair.sentinel, { timeout: 14000 }).catch(() => {});
       for (const state of (pair.states && pair.states.length ? pair.states : [''])) {
         const key = `${pair.name}${state ? ':' + state : ''}`;
         try {
-          const m = await measure(mpage, pair.mockupSel, state);
-          const p = await measure(ppage, pair.prodSel, state);
+          const m = await measure(mpage, pair.mockupSel, state, cfg.measureTimeout);
+          const p = await measure(ppage, pair.prodSel, state, cfg.measureTimeout);
           const fields = {};
           for (const f of FIELDS) fields[f] = { mockup: m[f], prod: p[f], match: diff(f, m[f], p[f]) };
           report.viewports[vw][key] = { fields, drift: Object.entries(fields).filter(([, v]) => !v.match).map(([k]) => k) };

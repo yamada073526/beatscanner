@@ -1,4 +1,3 @@
-import React from 'react';
 import { usePeriodReturns } from '../../../hooks/usePeriodReturns.js';
 
 /**
@@ -86,33 +85,33 @@ function PeriodChip({ periodDef, periodData }) {
 
   return (
     <div
-      className="return-grid-chip ds-stat"
+      className="return-grid-chip"
       style={{
+        // mockup v6 .retgrid .rc 準拠 (カード枠 + 中央寄せ)。index.css は触らず CSS-in-JS で適用。
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-sm, 8px)',
+        padding: 'var(--space-2, 8px)',
+        textAlign: 'center',
+        background: 'var(--bg-subtle)',
         opacity: available ? 1 : 0.5,
         minWidth: 0, // grid auto-fit でオーバーフロー防止
       }}
     >
-      {/* 値: tabular-nums + fw700 (ds-stat__value class が担当)。
-          v195 round2: 22→20px でバリュエーション MetricChip (20px) と一致 (高さ/ヒエラルキー統一)。
-          KpiStrip (36px) との階層分離は維持。 */}
+      {/* ラベル → 値の順 (mockup .rc は .rk 上 / .rv 下)。ラベル = .retgrid .rk: 10px muted */}
+      <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+        {label}
+      </div>
+
+      {/* 値 = .retgrid .rv: 14px / 600 / tabular-nums。色は gain/loss/muted */}
       <div
-        className="ds-stat__value"
-        style={{ color, fontSize: 20, lineHeight: 1.2 }}
+        style={{ color, fontSize: 14, fontWeight: 600, marginTop: 2, fontVariantNumeric: 'tabular-nums', lineHeight: 1.3 }}
       >
         {displayValue}
       </div>
 
-      {/* ラベル: 期間文字列 (1W / 1M 等) */}
-      <div className="ds-stat__label">
-        {label}
-      </div>
-
-      {/* hint: 累積 / 設定日前 (.ds-stat__hint class が fontSize/color を担当) */}
+      {/* hint: 設定日前 (available=false の degrade。mockup 外だが Trust Cliff 防止で残す) */}
       {hintText && (
-        <div
-          className="ds-stat__hint"
-          style={{ marginTop: 'var(--space-1, 4px)' }}
-        >
+        <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 2 }}>
           {hintText}
         </div>
       )}
@@ -126,8 +125,15 @@ function PeriodChip({ periodDef, periodData }) {
 function SkeletonChip() {
   return (
     <div
-      className="return-grid-chip ds-stat"
+      className="return-grid-chip"
       aria-hidden="true"
+      style={{
+        // PeriodChip と同じカード枠で loading→loaded の CLS を抑える (mockup .rc 準拠)。
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-sm, 8px)',
+        padding: 'var(--space-2, 8px)',
+        background: 'var(--bg-subtle)',
+      }}
     >
       {/* 値 skeleton */}
       <div
@@ -163,7 +169,7 @@ function PeriodGrid({ periods, periodsData, loading }) {
       style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: 'var(--space-4, 16px)',
+        gap: 'var(--space-2, 8px)', // mockup .retgrid gap:8px
       }}
     >
       {periods.map((p) =>
@@ -192,10 +198,13 @@ function TermLabel({ text }) {
   return (
     <div
       style={{
-        fontSize: 12,
-        fontWeight: 500,
+        // mockup v6 .ret-term .tl 準拠: 10px / 700 / uppercase / letter-spacing。
+        fontSize: 10,
+        fontWeight: 700,
+        letterSpacing: '0.06em',
+        textTransform: 'uppercase',
         color: 'var(--text-muted)',
-        marginBottom: 'var(--space-2, 8px)',
+        marginBottom: 6,
       }}
     >
       {text}
@@ -206,30 +215,24 @@ function TermLabel({ text }) {
 function TermSplitGrid({ periodsData, loading }) {
   const short = PERIODS.slice(0, 4); // 1W / 1M / 3M / 6M
   const long = PERIODS.slice(4);     // 1Y / 3Y / 5Y / 10Y
-  // v185 dogfood (2026-06-08): user「上下の余白が詰まって非常に見づらい」 → セクション間 gap /
-  //   区切り線の上下 padding / ラベル下 margin を拡大し、短期/長期 の呼吸 (breathing room) を確保。
-  // v195 dogfood (2026-06-10): user「バリュエーションは gold left accent でグルーピングを示すが
-  //   期間別累積リターンには無い」→ TtmValuationPanel と同じ「§C-11 引用ブロック idiom」(gold left
-  //   border + 軽インデント) を傘下の短期/長期 grid 全体に付与し、 ファンダ章のメトリクスグリッドと一貫化。
-  //   数値の中央揃え (PeriodChip) は user 希望どおり維持 (バリュエーションは左寄せ、 リターンは中央 = いいとこ取り)。
-  //   gold 30% は elevation whitelist (TtmValuationPanel と同値)。 splitByTerm=v5 のみ、 v4/ETF は PeriodGrid 直で不変。
-  // v195 round2 (user dogfood 2026-06-10「上下の高さが大きすぎ」): gap/paddingTop を space-8(32px)→
-  //   space-4(16px) に圧縮しバリュエーションと同程度の高さに。 短期/長期の分離は borderTop + TermLabel で担保済。
+  // 2026-06-30 mockup v6 完全準拠 (user gate): v195 で追加した gold left border + paddingLeft +
+  //   長期 borderTop は mockup .ret-term に存在せず de-noise 方針に反するため除去。短期/長期は
+  //   margin (gap space-3 = 12px、mockup .ret-term margin-top:12px) で分離する。
+  //   §④ バリュエーション章との gold 一貫性は user 判断で §③ では取らない方針 (mockup 忠実優先)。
+  //   splitByTerm=v5 のみ、 v4/ETF は PeriodGrid 直で不変。
   return (
     <div
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: 'var(--space-4, 16px)',
-        paddingLeft: 'var(--space-3, 12px)',
-        borderLeft: '2px solid color-mix(in srgb, var(--color-gold) 30%, transparent)',
+        gap: 'var(--space-3, 12px)',
       }}
     >
       <div>
         <TermLabel text="短期" />
         <PeriodGrid periods={short} periodsData={periodsData} loading={loading} />
       </div>
-      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 'var(--space-4, 16px)' }}>
+      <div>
         <TermLabel text="長期" />
         <PeriodGrid periods={long} periodsData={periodsData} loading={loading} />
       </div>
