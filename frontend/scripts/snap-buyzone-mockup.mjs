@@ -3,7 +3,7 @@
 import { chromium } from 'playwright';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, existsSync } from 'node:fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '../../');
@@ -17,7 +17,11 @@ const killer = setTimeout(() => { console.error('TIMEOUT'); process.exit(2); }, 
 
 let browser;
 try {
-  browser = await chromium.launch({ headless: true, executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  // cross-env: Linux cloud 固定パスが在れば使い、無ければ Playwright 既定 chromium（macOS local 等）
+  const linuxPath = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+  const launchOpts = { headless: true };
+  if (existsSync(linuxPath)) launchOpts.executablePath = linuxPath;
+  browser = await chromium.launch(launchOpts);
   const page = await browser.newPage({ viewport: { width: 800, height: 1400 }, deviceScaleFactor: 2 });
   await page.goto('file://' + mockup, { waitUntil: 'networkidle' });
   await page.screenshot({ path: out, fullPage: true });
