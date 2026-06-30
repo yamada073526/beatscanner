@@ -1,0 +1,108 @@
+-- ========================================================================
+-- screener_fundamentals へ cfps_eps_ratio カラム追加 (2026-06-30)
+-- 作成日: 2026-06-30
+-- セッション: screener backend Priority 3 — 条件5 CFPS>EPS データ配線 (Phase 1)
+--             参照 memory: project_screener_condition_expansion
+--
+-- 目的: 条件5「CFPS > EPS (粉飾リスク低)」を screener_fundamentals テーブルに
+--       永続化する。nightly canslim-scan が直近期の CFPS と EPS から比率を算出し
+--       upsert する。screener で「CFPS>EPS を満たす銘柄」を DB SELECT で絞り込む。
+--
+-- 定義:
+--   cfps_eps_ratio = CFPS / EPS (直近期、newest)
+--     CFPS = operatingCashFlow / weightedAverageShsOutDil
+--            (_compute_earnings_metrics と同流儀。cfps_3y_rising と同一の CFPS 定義)
+--   numeric (ratio): > 1.0 ⟺ CFPS > EPS (条件5 達成)。大きさも保持する。
+--   NULL = 判定不能 (下記 guard / clamp / データ欠落)。
+--
+-- ⚠️ EPS≤0 clamp (NULL 保存):
+--   EPS ≤ 0 のとき cfps/eps は CFPS>EPS の真偽と乖離する
+--     (例 CFPS=5, EPS=-2 → CFPS>EPS は True だが ratio = -2.5 < 1.0 で誤判定)。
+--   EPS ≤ 0 では比率が条件5の意味を表せないため NULL 保存 (誤った南京錠を防ぐ)。
+--
+-- sector guard (NULL 保存):
+--   銀行/保険/REIT/証券/Consumer Finance/Mortgage は NULL で保存。
+--   ocf_gt_netincome と同一の sector guard を流用 (金融は CF 構造が特殊で
+--   CFPS>EPS がザル化するため、じっちゃま/オニール KB §0-3 金融 verdict)。
+--
+-- 外貨 ADR guard (NULL 保存):
+--   reportedCurrency != "USD" → NULL (income-statement の通貨ミスマッチ防止)。
+--
+-- 追加 FMP fetch ゼロの根拠:
+--   CFPS = operatingCashFlow (cf_data, 既存 buyback_yield/ocf ブロックで fetch 済)
+--          / weightedAverageShsOutDil (income-statement, A 条件で fetch 済)。
+--   EPS は既存 eps_yoy_pct / latest_beat ブロックで fetch 済 → 追加 call ゼロ。
+--
+-- ⚠️ gate 化 (frontend 南京錠) はこの migration 適用 + nightly populate 確認後の
+--   別セッション。データ未生成のまま applied gate にすると「常時 NULL で全滅」
+--   になるため (cfps_3y_rising / ocf_gt_netincome と同じ Phase 分離方針)。
+--   本 migration は backend データ配線のみ (Phase 1)。
+--
+-- 設計方針:
+--   - ADD COLUMN のみ (破壊的 DDL なし、adding-only)
+--   - IF NOT EXISTS で冪等 (安全に再実行可)
+--   - service_role に明示 GRANT (feedback_supabase_grant_bug.md 必須パターン)
+--   - NULL = sector guard / 外貨 ADR / EPS≤0 clamp / データなし (None-preserve)
+--   - backend optional_cols fallback により migration 未適用でも upsert は落ちない
+--
+-- memory anchor:
+--   feedback_supabase_grant_bug.md (GRANT 抜けで silent fail)
+--   feedback_foreign_currency_adr_guards.md (外貨 ADR の通貨ミスマッチ)
+--   feedback_edit_replace_all_drift.md (tuple arity 全 occurrence 確認)
+--   feedback_revenue_basis_mismatch.md (銀行/REIT の sector guard)
+-- ========================================================================
+
+-- 条件5 CFPS > EPS (粉飾リスク低): 直近期 CFPS / EPS 比率
+-- NULL = sector guard (銀行/保険/REIT/証券等) / 外貨 ADR / EPS≤0 clamp / データなし
+-- > 1.0 = CFPS が EPS を上回る (利益の質 OK、条件5 達成)
+-- <= 1.0 = CFPS <= EPS (利益の質に懸念)
+alter table screener_fundamentals
+  add column if not exists cfps_eps_ratio numeric;
+
+-- 検索性能: screener で「CFPS>EPS の銘柄」絞り込みに使う index
+-- (calc_date + cfps_eps_ratio の複合で「直近日の条件5 該当銘柄」を高速取得)
+create index if not exists screener_fundamentals_date_cfps_eps_ratio_idx
+  on screener_fundamentals (calc_date desc, cfps_eps_ratio)
+  where cfps_eps_ratio is not null;
+
+-- GRANT: service_role に明示付与 (screener_fundamentals は service_role のみアクセス)
+-- feedback_supabase_grant_bug.md パターン: ADD COLUMN 後に GRANT を明示しないと
+-- service_role で "permission denied" が出る場合がある (silent fail の既知 bug)
+grant select, insert, update, delete on public.screener_fundamentals to service_role;
+
+-- ========================================================================
+-- 完了確認 (実行後に SQL Editor で実行):
+--
+-- 1. カラム追加確認:
+--   select column_name, data_type
+--     from information_schema.columns
+--    where table_name = 'screener_fundamentals'
+--      and column_name = 'cfps_eps_ratio';
+--   -- 1行返れば成功 (data_type = 'numeric')
+--
+-- 2. GRANT 確認:
+--   select grantee, privilege_type
+--     from information_schema.role_table_grants
+--    where table_name = 'screener_fundamentals' and grantee = 'service_role'
+--    order by privilege_type;
+--   -- SELECT / INSERT / UPDATE / DELETE を含む 4+ 行返れば成功
+--
+-- 3. canslim-scan 手動実行後の data 確認:
+--   select ticker, calc_date, cfps_eps_ratio, null_reasons
+--     from screener_fundamentals
+--    where calc_date = current_date
+--      and cfps_eps_ratio is not null
+--    order by ticker
+--    limit 20;
+--   -- AAPL/MSFT/NVDA が cfps_eps_ratio > 1.0 で返れば成功 (キャッシュ創出力が高い)
+--
+-- 4. sector guard / EPS≤0 clamp 確認:
+--   select ticker, cfps_eps_ratio, null_reasons
+--     from screener_fundamentals
+--    where calc_date = current_date
+--      and ticker in ('JPM', 'BAC', 'WFC', 'GS', 'MS')
+--    order by ticker;
+--   -- 全銘柄で cfps_eps_ratio = null が期待値 (金融 sector guard)
+--   -- null_reasons に "cfps_eps_ratio":"sector_guard" / "eps_non_positive" が
+--   --   入っていれば理想
+-- ========================================================================
