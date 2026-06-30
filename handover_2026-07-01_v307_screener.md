@@ -36,6 +36,7 @@
 - → 差分(a)(b)は事故 drift でなく意図的未着手。**新規 mockup v15 不要**。
 
 ## 残タスク（clean main 確認後に着手）
+0. 🔵 **Stop hook を main にマージ（push 自動完走の有効化）** — commit `0a958c4` で `claude/screener-2026-07-01` に Stop hook（`.claude/hooks/stop_autopush_feature_branch.sh` + settings.json 登録）を実装済。feature branch の未 push commit をセッション終了時に自動 push（main/master は skip=誤 deploy 防止・commit はしない=push のみ・git add しない）。user 要望（出先 PC 継続）。**main マージまでは従来の post_write_handover_autopush（handover Write 時のみ push）が動作**。下記 SPEC Phase4 と一緒に PR で main へ。
 1. 🟡 **SPEC Phase 4 を main に反映** — MU/SNX が GAAP・NonGAAP 両 EPS guidance を開示時に Haiku が GAAP を抽出 → eps_basis='gaap' → consensus(non-GAAP)と mismatch → EPS 抑止する**取りこぼし**。改善 =「両記載時 **NonGAAP 優先抽出**」（`visualizer/sec_guidance.py` prompt の basis 優先ルール）。§38 risk なし・data completeness のみ・優先度低。**この branch の `SPEC_2026-06-29_guidance-layer-a-activation.md` に Phase 4 として記載済**。
 2. 🟡 **#4 flip monitoring**（GA4/Sentry）— Sentry MCP 要認証・GA4 web property → 在席で対話。
 3. 🟡 **#5 ファイル整理**（snap-*.mjs 多数）— 並行セッション着地まで DEFER。
