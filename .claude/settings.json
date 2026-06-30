@@ -97,6 +97,18 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/stop_autopush_feature_branch.sh",
+            "timeout": 30,
+            "statusMessage": "feature branch を remote 同期中..."
+          }
+        ]
+      }
     ]
   }
 }
