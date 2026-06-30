@@ -134,6 +134,24 @@ class TestComputeCfpsEpsRatio:
         assert ratio == 3.0
         assert reason is None
 
+    def test_negative_cfps_positive_eps_valid_below_one(self):
+        """CFPS < 0 (営業CF赤字) かつ EPS > 0 → ratio < 1.0 を有効値として保存 (clamp しない)。
+
+        CF が利益を裏付けない = 条件5 未達を正しく表す。EPS>0 なので符号反転せず、
+        screener の > 1.0 gate で正しく除外される (eps≤0 のみ clamp 対象)。
+        """
+        rows = [{"cfps": -3.0, "eps": 2.0}]
+        ratio, reason = _compute_cfps_eps_ratio_from_metrics(rows)
+        assert ratio == -1.5
+        assert reason is None
+
+    def test_tiny_positive_eps_large_ratio_preserved(self):
+        """極小正 EPS (0.0001) → 大きな ratio を有効値として保存 (ゼロ除算でない)"""
+        rows = [{"cfps": 5.0, "eps": 0.0001}]
+        ratio, reason = _compute_cfps_eps_ratio_from_metrics(rows)
+        assert ratio == 50000.0
+        assert reason is None
+
 
 # ─── 統合: _compute_earnings_metrics → ratio (analysis 側と同一定義) ──────────────
 

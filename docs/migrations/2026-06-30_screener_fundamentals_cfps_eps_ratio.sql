@@ -9,11 +9,18 @@
 --       upsert する。screener で「CFPS>EPS を満たす銘柄」を DB SELECT で絞り込む。
 --
 -- 定義:
---   cfps_eps_ratio = CFPS / EPS (直近期、newest)
+--   cfps_eps_ratio = CFPS / EPS (★ annual・最新会計年度)
 --     CFPS = operatingCashFlow / weightedAverageShsOutDil
 --            (_compute_earnings_metrics と同流儀。cfps_3y_rising と同一の CFPS 定義)
 --   numeric (ratio): > 1.0 ⟺ CFPS > EPS (条件5 達成)。大きさも保持する。
 --   NULL = 判定不能 (下記 guard / clamp / データ欠落)。
+--
+-- ★ periodicity = annual の理由 (Trust Cliff 回避):
+--   analysis 画面の headline 5条件 verdict (judge() / _analyze_core) は period="annual" で
+--   fetch し最新会計年度で条件5を判定する。screener も annual に揃えないと
+--   「screener では達成だが分析画面では未達」の矛盾 (Trust Cliff) が出る。
+--   兄弟列 cfps_3y_rising (annual) / ocf_gt_netincome (TTM) とも時間軸が揃う。
+--   単期 (quarterly) は運転資本変動で粉飾リスク低を誤判定する偽陽性も避ける (金融 verdict §0-3)。
 --
 -- ⚠️ EPS≤0 clamp (NULL 保存):
 --   EPS ≤ 0 のとき cfps/eps は CFPS>EPS の真偽と乖離する
@@ -29,9 +36,9 @@
 --   reportedCurrency != "USD" → NULL (income-statement の通貨ミスマッチ防止)。
 --
 -- 追加 FMP fetch ゼロの根拠:
---   CFPS = operatingCashFlow (cf_data, 既存 buyback_yield/ocf ブロックで fetch 済)
---          / weightedAverageShsOutDil (income-statement, A 条件で fetch 済)。
---   EPS は既存 eps_yoy_pct / latest_beat ブロックで fetch 済 → 追加 call ゼロ。
+--   annual income (annual_recs) は A 条件 (eps_cagr_3y) で fetch 済、
+--   annual cash flow (cf_annual) は cfps_3y_rising ブロックで fetch 済。
+--   両者を _compute_earnings_metrics に渡して最新年の CFPS/EPS を date-join → 追加 call ゼロ。
 --
 -- ⚠️ gate 化 (frontend 南京錠) はこの migration 適用 + nightly populate 確認後の
 --   別セッション。データ未生成のまま applied gate にすると「常時 NULL で全滅」

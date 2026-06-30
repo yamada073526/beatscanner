@@ -4149,13 +4149,16 @@ def _compute_earnings_metrics(income_data: list, cf_data: list) -> list[dict]:
 
 
 def _compute_cfps_eps_ratio_from_metrics(em_rows: "list[dict]") -> "tuple[float | None, str | None]":
-    """_compute_earnings_metrics の出力から直近Qの CFPS/EPS 比率を算出する純粋関数 (条件5)。
+    """_compute_earnings_metrics の出力から最新期の CFPS/EPS 比率を算出する純粋関数 (条件5)。
 
+    period は呼び出し側が決める (screener は annual を渡す = headline judge() と一致)。
     数値物理層 (LLM 不使用)。CFPS>EPS = 利益がキャッシュで裏付けられている = 粉飾リスク低。
     - em_rows は date 昇順 (_compute_earnings_metrics の sorted 出力) → 末尾から走査し、
-      eps/cfps 両方が非 None の最新 Q を採用 (最新 Q が op_cf 欠落でも 1Q 遡って救済)。
-    - EPS ≤ 0 は cfps/eps が CFPS>EPS の真偽と乖離する (例 CFPS=5,EPS=-2 → CFPS>EPS=True
-      だが ratio=-2.5<1.0) ため None (eps_non_positive)。誤った「南京錠」を防ぐ clamp。
+      eps/cfps 両方が非 None の最新期を採用 (最新期が op_cf 欠落でも 1 期遡って救済)。
+    - EPS ≤ 0 のみ clamp して None (eps_non_positive): cfps/eps が CFPS>EPS の真偽と乖離する
+      (例 CFPS=5,EPS=-2 → CFPS>EPS=True だが ratio=-2.5<1.0)。誤った「南京錠」を防ぐ。
+    - CFPS < 0 (EPS>0) は clamp しない: ratio<1.0 が「条件5 未達 (CF が利益を裏付けない)」を
+      正しく表すため有効値として保存する (分母 EPS>0 なら符号は反転しない)。
     - 戻り値: (ratio, null_reason)。ratio が None のとき null_reason に原因コード、
       ratio が算出できたとき null_reason=None。
     - sector guard / 外貨ADR guard は呼び出し側 (_compute_one) が前段で判定する
@@ -23711,13 +23714,17 @@ async def cron_canslim_scan(
             except Exception:
                 latest_beat = None
 
-            # ── 単調増加判定: cfps_3y_rising (CFPS = 営業CF/希薄化株式数、+1 API call: annual cash flow) ──
-            # user 承認の annual CF 方式 (eps_3y_rising と対称な厳密「3 年連続増加」)。
+            # ── 単調増加判定 cfps_3y_rising + 条件5 cfps_eps_ratio (共に annual CF 方式) ──
+            # user 承認の annual CF 方式。cfps_3y_rising = eps_3y_rising と対称な厳密「3年連続増加」、
+            #   cfps_eps_ratio (下ブロック) = 最新年 CFPS/EPS 比率 (headline judge() と同じ annual)。
             # diluted_shares は annual_recs (income、A 条件で fetch 済) を date で join、
-            #   operatingCashFlow は annual cash flow を新規 fetch (+1 FMP call/銘柄/夜)。
-            # CFPS = operatingCashFlow / weightedAverageShsOutDil。_compute_earnings_metrics (L3953) と同流儀。
+            #   operatingCashFlow は annual cash flow を新規 fetch (+1 FMP call/銘柄/夜、両条件で共有)。
+            # CFPS = operatingCashFlow / weightedAverageShsOutDil。_compute_earnings_metrics と同流儀。
             # None-preserve: 有効 CFPS < 4 期 → None (False でない、_calc_monotonic_rising 契約)。
             cfps_3y_rising: "bool | None" = None
+            cfps_eps_ratio: "float | None" = None
+            cfps_eps_null_reason: "str | None" = None
+            cf_annual: list = []  # 下の cfps_eps_ratio ブロックで流用 (スコープ保証)
             try:
                 cf_annual = await client.cash_flow(ticker, limit=4, period="annual")
                 if (
@@ -23753,35 +23760,39 @@ async def cron_canslim_scan(
             except Exception:
                 cfps_3y_rising = None
 
-            # ── 条件5: cfps_eps_ratio (直近Q CFPS / EPS、粉飾リスク低指標) ─────────────
-            # CFPS = 営業CF / 希薄化株式数。analysis 側 条件5 と同一定義 (_compute_earnings_metrics
-            #   L4078 を再利用) で Trust Cliff 回避 + DRY。> 1.0 ⟺ CFPS > EPS (条件5 達成)。
-            # 追加 FMP call ゼロ: cf_data (上の S 条件ブロックで fetch 済) + is-q (income-statement
-            #   quarterly、 共有 cache key "is-q::TICKER" で ocf ブロックが populate 済 → cache hit)。
+            # ── 条件5: cfps_eps_ratio (最新年 annual CFPS / EPS、粉飾リスク低指標) ──────────
+            # ★ periodicity = annual。headline judge() (main.py の _analyze_core が
+            #   period="annual" で fetch、 periods[-3:] の最新年で cond5 を判定) と同じ時間軸に
+            #   揃え、「screener 達成 ≠ 分析画面 verdict」の Trust Cliff を回避する
+            #   (multi-review CRITICAL 指摘・金融 verdict: 単期は運転資本変動で偽陽性)。
+            #   兄弟列 cfps_3y_rising (annual) / ocf_gt_netincome (TTM) とも時間軸が揃う。
+            # CFPS = operatingCashFlow / weightedAverageShsOutDil。analysis 側 条件5 と同一定義
+            #   (_compute_earnings_metrics 再利用) で値も一致。> 1.0 ⟺ CFPS > EPS (条件5 達成)。
+            # 追加 FMP call ゼロ: annual_recs (A 条件 fetch 済) + cf_annual (上の cfps_3y_rising
+            #   ブロックで fetch 済) を再利用。
             # None-preserve: sector guard / 外貨ADR / EPS≤0 clamp / データ欠落 → None。
-            cfps_eps_ratio: "float | None" = None
-            cfps_eps_null_reason: "str | None" = None
             try:
                 if _roe_sector_guard(sector, industry):
                     # 銀行/保険/REIT/証券等は CF 構造が特殊で CFPS>EPS がザル化 (金融 verdict §0-3)
                     cfps_eps_null_reason = "sector_guard"
                 else:
-                    _isq_for_cfps = await safe_fmp_get(
-                        f"https://financialmodelingprep.com/stable/income-statement"
-                        f"?symbol={ticker.upper()}&period=quarter&limit=6&apikey={fmp_key}",
-                        f"is-q::{ticker.upper()}", ttl=CACHE_TTL_PROFILE,
+                    _ar0 = (
+                        annual_recs[0]
+                        if (isinstance(annual_recs, list) and annual_recs and isinstance(annual_recs[0], dict))
+                        else {}
                     )
-                    _isq_list = _isq_for_cfps if isinstance(_isq_for_cfps, list) else []
-                    _isq0 = _isq_list[0] if (_isq_list and isinstance(_isq_list[0], dict)) else {}
-                    _cur = _isq0.get("reportedCurrency") or "USD"
+                    _cur = _ar0.get("reportedCurrency") or "USD"
                     if _cur and str(_cur).upper() != "USD":
                         # 外貨 ADR guard: income-statement の通貨ミスマッチ防止
                         cfps_eps_null_reason = "adr_currency"
                     else:
                         # 数値計算は純粋関数 _compute_cfps_eps_ratio_from_metrics に委譲
-                        # (末尾=直近Q 採用 / EPS≤0 clamp / None-preserve、単体テスト可能)。
-                        _em_rows = _compute_earnings_metrics(_isq_list, cf_data)
-                        cfps_eps_ratio, cfps_eps_null_reason = _compute_cfps_eps_ratio_from_metrics(_em_rows)
+                        # (最新期採用 / EPS≤0 clamp / None-preserve、単体テスト可能)。
+                        _em_annual = _compute_earnings_metrics(
+                            annual_recs if isinstance(annual_recs, list) else [],
+                            cf_annual if isinstance(cf_annual, list) else [],
+                        )
+                        cfps_eps_ratio, cfps_eps_null_reason = _compute_cfps_eps_ratio_from_metrics(_em_annual)
             except Exception:
                 cfps_eps_ratio = None
                 cfps_eps_null_reason = "data_missing"
@@ -24030,7 +24041,7 @@ async def cron_canslim_scan(
                 ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome,
                 eps_3y_rising, rev_3y_rising, latest_beat, cfps_3y_rising,
                 (entry_date_str[:10] if entry_date_str else None),  # last_report_date: 直近決算の報告日
-                cfps_eps_ratio,  # 条件5: 直近Q CFPS/EPS 比率 (粉飾リスク低指標、None-preserve)
+                cfps_eps_ratio,  # 条件5: 最新年 CFPS/EPS 比率 (粉飾リスク低指標、None-preserve)
                 None, null_reasons, flash,  # flash = 決算速報7フィールド dict (SPEC §13)
             )
         except Exception as e:
