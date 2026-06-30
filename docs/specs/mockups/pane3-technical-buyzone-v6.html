@@ -39,9 +39,8 @@
   .cchip.px{font-weight:700;color:var(--text-primary);border-color:var(--border-strong);}
   .cchip.cup{color:var(--warning);border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.1);}
   .cchip.gc{color:var(--gain);border-color:rgba(52,239,129,.4);} .cchip.rs{color:var(--text-secondary);}
-  /* ★fix②: RS 50 は O'Neil ≥80 基準で「やや弱い」 amber 注記化（無印だと買い適格に誤読）。色信号OK/買い場断定NG を堅持 */
-  .cchip.rsweak{color:var(--warning);border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.06);}
-  .cchip.rsweak .u{color:var(--text-muted);font-weight:400;}
+  /* ★RS 注記は実装で「現状維持」に決定 (2026-06-30 user): 既存 6体合議の RS tone band (40-79=muted) が
+     「強くない」 を既に表現済み・amber は確定 tone band を変える over-signaling のため不採用。 */
   .ctools{margin-left:auto;display:flex;gap:5px;align-items:center;}
   .ctools .tg{font-size:11px;border:1px solid var(--border);border-radius:6px;padding:3px 8px;color:var(--text-secondary);}
   .periods{display:flex;gap:4px;} .periods .p{font-size:11px;color:var(--text-secondary);border:1px solid var(--border);border-radius:6px;padding:3px 8px;}
@@ -128,7 +127,7 @@
   <div class="legend">
     <b>§③ テクニカル・買い場 — 価格機能 統合モックアップ v6</b>（v5[B]骨格 ＋ 原版[A]の長所統合 ＋ 5体合議の必須修正）<br>
     <span class="fix">統合元</span>: <b>骨格＝v5(本日版)</b>（verdict bar 2秒 anchor／チャート先行／de-noise したサマリー／中立 rail＝§38-safe／出来高ゲージ針／折りたたみリターン／null 注記）。<b>原版(full-v5 §③)から統合</b>＝チャートの価格地図（Pivot/50日線/52週高値ライン。価格値はラダーに集約し、チャートには載せない＝§38-safe）。原版の rail 緑赤グラデ・zone 緑赤塗りは §38（断定示唆＝原則1）で<b>不採用</b>。<br>
-    <span class="k">5体合議の必須修正</span>: ① <b>「↓ リスクまで −8%」を累進開示で抑制</b>（ブレイク待ち中は非表示。verdict が「ブレイク確認」へ遷移して初めて「買値 −8% 損切り」を表示＝押し目買い誘発と価格逆算漏洩を両断）② <b>RS 50 を「やや弱い（80+で強い）」amber 注記化</b> ③ <b>出来高ゲージに AND 条件</b>（Pivot 上抜け かつ +40%）④ <b>ゲージ視認性</b>（高さ+ラベル台座）⑤ verdict bar の状態ラベルと価格の重力バランス調整＋ctop の現在値重複を削除。<br>
+    <span class="k">5体合議の必須修正</span>: ① <b>「↓ リスクまで −8%」を累進開示で抑制</b>（ブレイク待ち中は非表示。verdict が「ブレイク確認」へ遷移して初めて「買値 −8% 損切り」を表示＝押し目買い誘発と価格逆算漏洩を両断）② <b>RS 50 は現状維持</b>（既存6体合議の muted tone が「強くない」を表現済み・amber は over-signaling のため不採用 2026-06-30）③ <b>出来高ゲージに AND 条件</b>（Pivot 上抜け かつ +40%）④ <b>ゲージ視認性</b>（高さ+ラベル台座）⑤ verdict bar の状態ラベルと価格の重力バランス調整＋ctop の現在値重複を削除。<br>
     <span class="muted">※ 数値は NVDA 想定サンプル。状態は「ブレイク待ち（監視）」を表示中。長期リターン(3Y+)は別 fetch のため初期実装は 1Y 内先行。</span>
   </div>
 
@@ -147,7 +146,7 @@
     <div class="ctop">
       <span class="cchip cup">取っ手付きカップ 形成中</span>
       <span class="cchip gc">ゴールデンクロス</span>
-      <span class="cchip rsweak">RS 50 <span class="u">／やや弱い・80+で強い</span></span>
+      <span class="cchip rs">RS 50</span>
       <span class="ctools"><span class="tg">線 / ローソク</span><span class="periods"><span class="p">1M</span><span class="p on">3M</span><span class="p">6M</span><span class="p">1Y</span><span class="p">5Y</span></span></span>
     </div>
     <div class="chartbox">
