@@ -102,6 +102,13 @@ export const BUY_ZONE_DESC_JP = {
   // resistance_retest / pullback_to_support の3文構造(一般ルール引用 → pattern failure 両面 → 免責)を踏襲。
   // {VMULT} / {PIVOT} / {BASE_RISE_PCT} 等は backend 物理層が計算 → frontend は文字列置換のみ。
   // classifyBreakoutZone() 経由でのみ到達する (classifyBuyZone の cup_handle 文脈 narration とは独立)。
+  //
+  // ⚠️ 出来高閾値の差 (50%+ vs cup_handle の 40%+) は意図的で bug ではない (流用禁止):
+  //   - breakout 系 (bo_confirmed/bo_soft) = 50%+  : backend `_BO_CONFIRM_VOL=1.5` (soft は 1.3–1.49x)
+  //   - cup_handle 系 (cup_pivot/cup_completing) = 40%+ : backend `breakout_volume_multiplier=1.40`
+  //   backend main.py §1.3/§1.4 が「cup_handle の閾値を流用禁止」と明記する独立 SSOT (2026-06-17 Sprint A 監査で確定)。
+  //   narration は各検出器の実閾値に一致させること (統一すると物理層とズレて別の Trust Cliff になる)。
+  //   O'Neil 原典の出来高確認は +40〜50% のレンジで、40%/50% は共にこの範囲内 (breakout は意図的に厳しめ)。
   bo_confirmed: {
     conclusion: '直近 pivot を出来高を伴って上抜けた局面です。',
     detail: '一般的なルールでは、base 完成水準 (pivot) を出来高 50%+ の増加を伴って終値で上抜けた状態が' +
