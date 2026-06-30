@@ -19,6 +19,7 @@ import pytest
 from app.earnings_mailer import (
     COMPLETENESS_SOURCE_LABEL,
     COMPLETENESS_STATUS_LABEL,
+    COMPLETENESS_STATUS_NOTE,
     EARNINGS_DISCLAIMER_INLINE,
     _build_earnings_html,
     _build_earnings_text,
@@ -445,6 +446,61 @@ class TestCompletenessLabel:
         text = _build_earnings_text([p])
         assert "機関投資家の保有（13F）" in html
         assert "機関投資家の保有（13F）" in text
+
+    def test_status_note_mirror(self):
+        """STATUS_NOTE が frontend completenessLedger.js と 1:1 mirror (理由開示の文言)。"""
+        assert COMPLETENESS_STATUS_NOTE["failed"] == (
+            "最新データを取得できませんでした（時間をおいて再読み込みで解消する場合があります）。"
+        )
+        assert COMPLETENESS_STATUS_NOTE["na"] == (
+            "この銘柄では該当データがありません（新規上場・非対象等）。"
+        )
+
+    def test_failed_and_na_show_reason_note(self):
+        """取得失敗 / 非該当 の行に理由注記が併記される (欠陥に見えない・in-app と 1:1)。HTML / text 両方。"""
+        p = build_earnings_payload(
+            ticker="NVDA",
+            verdict="inline",
+            surprise_pct=1.0,
+            eps_actual=0.89,
+            eps_estimate=0.88,
+            n_of_5=4,
+            conditions=SAMPLE_CONDITIONS,
+            completeness={
+                "earnings_surprises": "ok",
+                "income_q": "na",         # 非該当 → na note
+                "cash_flow_q": "ok",
+                "institutional": "failed",  # 取得失敗 → failed note
+            },
+            snapshot_jst="2026-07-01T07:00:00+09:00",
+        )
+        html = _build_earnings_html([p])
+        text = _build_earnings_text([p])
+        for body in (html, text):
+            assert COMPLETENESS_STATUS_NOTE["failed"] in body
+            assert COMPLETENESS_STATUS_NOTE["na"] in body
+
+    def test_ok_status_has_no_reason_note(self):
+        """ok 行には注記を付けない (取得済みに「再取得で解消」 等の不要文を出さない)。"""
+        p = build_earnings_payload(
+            ticker="MSFT",
+            verdict="beat",
+            surprise_pct=4.0,
+            eps_actual=2.95,
+            eps_estimate=2.84,
+            n_of_5=5,
+            conditions=SAMPLE_CONDITIONS,
+            completeness={
+                "earnings_surprises": "ok",
+                "income_q": "ok",
+                "cash_flow_q": "ok",
+                "institutional": "ok",
+            },
+            snapshot_jst="2026-07-01T07:00:00+09:00",
+        )
+        html = _build_earnings_html([p])
+        assert COMPLETENESS_STATUS_NOTE["failed"] not in html
+        assert COMPLETENESS_STATUS_NOTE["na"] not in html
 
     def test_completeness_in_html(self):
         """取得状況が HTML に反映されること。"""
