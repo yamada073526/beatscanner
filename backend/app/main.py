@@ -3995,18 +3995,27 @@ def _merge_universe_with_anchors(screener_top: list[str], anchors: list[str], n:
     return (screener_top[:keep] + missing)[:n]
 
 
-async def _fetch_market_cap_top_n(n: int = 1000) -> list[str]:
+# russell3000 universe の default 件数 (SSOT)。 production nightly は BODY で universe_size=3000 を
+# 明示するため、 この default は universe_size 省略の手動 curl / body-less 呼出時のみ使われる fallback。
+# 1000 のままだと cache_key (mktcap_top{n}) が production の 3000 と食い違い、 canslim-warmup が prime した
+# cache を後続 chunk が活かせず chunk-0 502 (mega-cap 欠落) を手動運用で再現しうる。 全 russell3000 cron の
+# default を 3000 に統一して production と一致させる (handover v309 Task1、 user 承認 2026-06-30)。
+RUSSELL3000_DEFAULT_N = 3000
+
+
+async def _fetch_market_cap_top_n(n: int = RUSSELL3000_DEFAULT_N) -> list[str]:
     """Russell 3000 相当: market_cap top N 銘柄 (NASDAQ + NYSE) を返す (24h cache).
 
     v124 Russell 3000 拡張 Phase 1 (SPEC §3-1):
       - FMP `/stable/company-screener?marketCapMoreThan=500M&isActivelyTrading=true
         &isEtf=false&isFund=false&exchange=NASDAQ,NYSE&limit=N` で market_cap 降順 top N 抽出
       - 既存 `_fetch_sp500_top_n()` と並列、 既存挙動を破壊しない
-      - cap 3000 (Phase 2 = Russell 3000 相当)、 default 1000 (Phase 1 試行)
+      - cap 3000 (Phase 2 = Russell 3000 相当)、 default RUSSELL3000_DEFAULT_N (=3000、 production と統一)
 
-    Phase 1 段階展開 (SPEC §5):
-      - top 1000 で nightly batch 時間 ~10-15 分内に収まる試行
-      - 1 週間運用後 Phase 2 (top 3000) へ拡大判断
+    段階展開の経緯 (SPEC §5):
+      - Phase 1 は top 1000 で試行 (nightly batch ~10-15 分)、 1 週間運用後 Phase 2 (top 3000) へ拡大
+      - production nightly は v158 以降 universe_size=3000 を BODY で明示。 本 default も 3000 に統一済
+        (handover v309 Task1) → universe_size 省略の手動 curl も production と同 cache_key になる
 
     Returns:
         ticker symbol list (market_cap desc sort、 mutual fund / ETF 除外済)
@@ -17185,8 +17194,8 @@ async def cron_cup_scan(
         # v124: 明示 tickers 指定時は 3000 cap (Russell 3000 対応)
         tickers = [str(t).upper().strip() for t in raw_tickers if t][:3000]
     elif universe_source == "russell3000":
-        # v124 Russell 3000 Phase 1: market_cap top N (NASDAQ+NYSE)、 default 1000
-        n = int(universe_size_arg) if universe_size_arg else 1000
+        # v124 Russell 3000 Phase 1: market_cap top N (NASDAQ+NYSE)、 default RUSSELL3000_DEFAULT_N (=3000)
+        n = int(universe_size_arg) if universe_size_arg else RUSSELL3000_DEFAULT_N
         tickers = await _fetch_market_cap_top_n(n)
         if not tickers:
             # fallback: russell3000 fetch 失敗時は SP500 へ graceful degrade
@@ -18024,7 +18033,7 @@ async def cron_rs_scan(
     if isinstance(raw_tickers, list) and raw_tickers:
         tickers = [str(t).upper().strip() for t in raw_tickers if t][:3000]
     elif universe_source == "russell3000":
-        n = int(universe_size_arg) if universe_size_arg else 1000
+        n = int(universe_size_arg) if universe_size_arg else RUSSELL3000_DEFAULT_N
         tickers = await _fetch_market_cap_top_n(n)
         if not tickers:
             print("[rs-scan] russell3000 fetch failed, falling back to sp500")
@@ -22881,7 +22890,7 @@ async def cron_earnings_annual_scan(
         n = int(universe_size_arg) if universe_size_arg else 500
         tickers = await _fetch_sp500_top_n(n)
     else:
-        n = int(universe_size_arg) if universe_size_arg else 1000
+        n = int(universe_size_arg) if universe_size_arg else RUSSELL3000_DEFAULT_N
         tickers = await _fetch_market_cap_top_n(n)
         if not tickers:
             print("[earnings-annual-scan] russell3000 fetch failed, falling back to sp500")
@@ -22969,10 +22978,10 @@ async def cron_canslim_warmup(
     universe_size_arg = body.get("universe_size")
     _t0 = _time.time()
     if universe_source == "russell3000":
-        # default は cron_canslim_scan の russell3000 default (1000) と揃える。GHA nightly は
-        # universe_size を明示する ($BODY=3000) ため body 値が使われるが、手動 curl で body 省略時の
-        # cache_key (mktcap_top{n}) 食い違いを防ぐ (6 体 ship 前 gate backend/FMP verdict)。
-        n = int(universe_size_arg) if universe_size_arg else 1000
+        # default は cron_canslim_scan の russell3000 default (RUSSELL3000_DEFAULT_N=3000) と揃える。
+        # GHA nightly は universe_size を明示する ($BODY=3000) ため body 値が使われるが、手動 curl で body
+        # 省略時の cache_key (mktcap_top{n}) 食い違いを防ぐ (6 体 ship 前 gate backend/FMP verdict)。
+        n = int(universe_size_arg) if universe_size_arg else RUSSELL3000_DEFAULT_N
         tickers = await _fetch_market_cap_top_n(n)
     else:
         n = int(universe_size_arg) if universe_size_arg else 500
@@ -23035,7 +23044,7 @@ async def cron_canslim_scan(
     if isinstance(raw_tickers, list) and raw_tickers:
         tickers = [str(t).upper().strip() for t in raw_tickers if t][:3000]
     elif universe_source == "russell3000":
-        n = int(universe_size_arg) if universe_size_arg else 1000
+        n = int(universe_size_arg) if universe_size_arg else RUSSELL3000_DEFAULT_N
         tickers = await _fetch_market_cap_top_n(n)
         if not tickers:
             print("[canslim-scan] russell3000 fetch failed, falling back to sp500")
