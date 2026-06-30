@@ -830,17 +830,28 @@ export default function JudgmentDetail({
                 {selectedTicker && (
                   <PriceLadder ticker={selectedTicker} plan={plan} onUpgrade={detailContext.onUpgrade} />
                 )}
-                {/* 期間別リターン（Phase2: 価格目安=PriceLadder 直下へ昇順・mockup v5 L4 準拠。
-                    ブレイクアウト強度行より前 = 価格目安の直下に配置）。
-                    ReturnGrid は usePeriodReturns 内蔵で親 data 配線不要。splitByTerm で短期/長期 2 段。*/}
+                {/* 期間別リターン（Sprint2: mockup v6 .fold = 折りたたみ化で §③ de-noise・user gate 2026-06-30）。
+                    AccordionSection で wrap し既定 collapsed。折りたたみ時 children unmount のため
+                    period-returns fetch も fold 展開まで自然に defer（backend 無変更で遅延読込・別fetch不要）。
+                    summary は中立ラベル（過去リターン数値を teaser に出さない＝§38/景表法 §5 safe）＋基準開示。
+                    ReturnGrid は sectionLabel={null}（fold title と二重見出し回避）・splitByTerm で短期/長期 2 段。*/}
                 {selectedTicker && (
-                  <ReturnGrid
-                    ticker={selectedTicker}
-                    frameless
-                    splitByTerm
-                    sectionLabel="期間別リターン"
-                    testId="v6-return-grid"
-                  />
+                  <AccordionSection
+                    key="v6-return-grid-fold"
+                    id="sec-v6-return-grid"
+                    title="期間別リターン"
+                    tier={3}
+                    defaultOpen={false}
+                    summary="価格ベース・分配金含まず"
+                  >
+                    <ReturnGrid
+                      ticker={selectedTicker}
+                      frameless
+                      splitByTerm
+                      sectionLabel={null}
+                      testId="v6-return-grid"
+                    />
+                  </AccordionSection>
                 )}
                 {/* buyq: mockup L4「ブレイクアウト強度（参考）」行。静的・§38-safe（参考/目安、行動指示なし）。*/}
                 {selectedTicker && (
