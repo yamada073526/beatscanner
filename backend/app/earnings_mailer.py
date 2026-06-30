@@ -144,6 +144,13 @@ class EarningsNotifyPayload(TypedDict):
     fwd_company_rev_high: float | None  # 来期 会社ガイダンス売上 上限 ($)
     fwd_company_rev_yoy_low_pct: float | None  # 来期 会社ガイダンス売上 前年比 下限 %
     fwd_company_rev_yoy_high_pct: float | None  # 来期 会社ガイダンス売上 前年比 上限 %
+    # ── 機関投資家の保有 (13F・O'Neil "I"。45日遅延の standing シグナル) ──
+    # §38: 保有率は事実 (将来予測でない)。増減方向に Beat/Miss 色は付けず neutral 固定。
+    # None = 取得不可 → セクション省略 (捏造しない)。
+    inst_ownership_pct: float | None  # 機関保有率 % (直近確定 13F)
+    inst_ownership_delta_pt: float | None  # 前期比 (percentage point)
+    inst_investors_holding: int | None  # 保有機関数
+    inst_quarter_label: str | None  # 「いつ時点か」 (e.g. "2026Q1")
 
 
 def build_earnings_payload(
@@ -168,6 +175,10 @@ def build_earnings_payload(
     fwd_company_rev_high: float | None = None,
     fwd_company_rev_yoy_low_pct: float | None = None,
     fwd_company_rev_yoy_high_pct: float | None = None,
+    inst_ownership_pct: float | None = None,
+    inst_ownership_delta_pt: float | None = None,
+    inst_investors_holding: int | None = None,
+    inst_quarter_label: str | None = None,
 ) -> EarningsNotifyPayload:
     """channel 非依存ペイロードを組む純関数。データ取得は Sprint 5 の責務。
 
@@ -213,6 +224,10 @@ def build_earnings_payload(
         fwd_company_rev_high=fwd_company_rev_high,
         fwd_company_rev_yoy_low_pct=fwd_company_rev_yoy_low_pct,
         fwd_company_rev_yoy_high_pct=fwd_company_rev_yoy_high_pct,
+        inst_ownership_pct=inst_ownership_pct,
+        inst_ownership_delta_pt=inst_ownership_delta_pt,
+        inst_investors_holding=inst_investors_holding,
+        inst_quarter_label=inst_quarter_label,
     )
 
 
@@ -250,6 +265,49 @@ def _fmt_yoy(pct: float | None) -> str:
         return "—"
     sym = "↑" if pct > 0 else "↓" if pct < 0 else ""
     return f"{sym}{abs(pct):.1f}%"
+
+
+def _fmt_delta_pt(pct: float | None) -> str | None:
+    """前期比 (percentage point) を方向記号 ↑↓ + 絶対値 + "p" で。None → None (行省略)。
+
+    §38: 増減方向は記号で示すのみ。色 (gain/loss) は呼出側で付けない (neutral 固定)。
+    """
+    if pct is None:
+        return None
+    if pct == 0:
+        return "前期比 横ばい"
+    sym = "↑" if pct > 0 else "↓"
+    return f"前期比 {sym}{abs(pct):.1f}p"
+
+
+def _render_institutional_html(payload: EarningsNotifyPayload) -> str:
+    """機関投資家の保有 (13F・O'Neil "I") セクション HTML。
+
+    §38: 機関保有率は事実 (将来予測でない)。増減方向に Beat/Miss 色は付けず neutral 固定
+    (「機関が買っている = 強気」 の評価暗示を回避)。pct が None (取得不可) はセクション省略
+    (捏造しない、flash メトリクスと同パターン)。13F は 45 日遅延の四半期報告 → 「いつ時点か」
+    を必ず併記 (古いデータを最新と誤認させない)。
+    """
+    pct = payload.get("inst_ownership_pct")
+    if pct is None:
+        return ""
+    parts = [f'保有率 <strong style="color:{TEXT_SECONDARY};">{pct:.1f}%</strong>']
+    delta = _fmt_delta_pt(payload.get("inst_ownership_delta_pt"))
+    if delta:
+        parts.append(f'<span style="color:{TEXT_MUTED};">（{delta}）</span>')
+    investors = payload.get("inst_investors_holding")
+    if investors is not None:
+        parts.append(f'<span style="color:{TEXT_MUTED};">・保有機関 {investors:,}社</span>')
+    quarter = payload.get("inst_quarter_label")
+    caption = (
+        f"（{quarter} 時点・FMP 13F・45日遅延）" if quarter else "（FMP 13F・45日遅延）"
+    )
+    return (
+        f'<p style="margin:4px 0 2px;font-size:13px;color:{TEXT_MUTED};">'
+        + "".join(parts)
+        + "</p>"
+        + f'<p style="margin:0 0 2px;font-size:11px;color:{TEXT_FAINT};">{caption}</p>'
+    )
 
 
 def _render_flash_metrics_html(payload: EarningsNotifyPayload) -> str:
@@ -400,6 +458,8 @@ def _render_single_ticker_block_html(payload: EarningsNotifyPayload) -> str:
     flash_html = _render_flash_metrics_html(payload)
     conditions_html = _render_conditions_html(conditions)
     completeness_html = _render_completeness_html(completeness)
+    # 機関投資家の保有 (13F)。data なし (pct None) は空文字 → 見出しごと省略。
+    institutional_html = _render_institutional_html(payload)
 
     # §38 免責 inline 1 行 (footer 切れ・転送対策)
     disclaimer_inline = EARNINGS_DISCLAIMER_INLINE
@@ -414,6 +474,15 @@ def _render_single_ticker_block_html(payload: EarningsNotifyPayload) -> str:
     _section_label = (
         f"margin:0 0 8px;font-size:14px;font-weight:700;color:{TEXT_PRIMARY};"
         f"letter-spacing:0.02em;border-left:3px solid {TEXT_FAINT};padding-left:8px;"
+    )
+
+    # 機関投資家の保有 セクション (data あるときのみ見出し + 本文。None は空 → 出さない)。
+    institutional_block = (
+        f'<div style="border-top:1px solid {BORDER_SUBTLE};margin:14px 0 0;"></div>'
+        f'<p style="{_section_label}margin-top:14px;">機関投資家の保有（13F）</p>'
+        f"{institutional_html}"
+        if institutional_html
+        else ""
     )
 
     return f"""\
@@ -447,6 +516,8 @@ def _render_single_ticker_block_html(payload: EarningsNotifyPayload) -> str:
     <table cellpadding="0" cellspacing="0" style="margin-bottom:8px;">
       {conditions_html}
     </table>
+    <!-- ── 区切り + セクション3: 機関投資家の保有 (13F・data あるときのみ) ── -->
+    {institutional_block}
     <!-- データ取得状況 -->
     <p style="margin:6px 0 2px;font-size:12px;color:{TEXT_SUBTLE};">データ取得状況:</p>
     <ul style="margin:0;padding-left:16px;">
@@ -575,6 +646,24 @@ def _render_single_ticker_block_text(payload: EarningsNotifyPayload) -> str:
     for name, passed in conditions.items():
         mark = "PASS" if passed else "FAIL"
         lines.append(f"      {name}: {mark}")
+    # ── セクション3: 機関投資家の保有 (13F・pct あるときのみ。§38 neutral) ──
+    _inst_pct = payload.get("inst_ownership_pct")
+    if _inst_pct is not None:
+        lines.append("  ── 機関投資家の保有（13F） ──")
+        _inst_extra: list[str] = []
+        _inst_delta = _fmt_delta_pt(payload.get("inst_ownership_delta_pt"))
+        if _inst_delta:
+            _inst_extra.append(_inst_delta)
+        _inst_inv = payload.get("inst_investors_holding")
+        if _inst_inv is not None:
+            _inst_extra.append(f"保有機関 {_inst_inv:,}社")
+        _inst_suffix = ("（" + "・".join(_inst_extra) + "）") if _inst_extra else ""
+        lines.append(f"    保有率 {_inst_pct:.1f}%{_inst_suffix}")
+        _inst_q = payload.get("inst_quarter_label")
+        _inst_cap = (
+            f"（{_inst_q} 時点・FMP 13F・45日遅延）" if _inst_q else "（FMP 13F・45日遅延）"
+        )
+        lines.append(f"    {_inst_cap}")
     lines.append("  データ取得状況:")
     for source_key, status in completeness.items():
         label_s = COMPLETENESS_STATUS_LABEL.get(status, status)

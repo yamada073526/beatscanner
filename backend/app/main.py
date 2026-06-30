@@ -24985,6 +24985,43 @@ async def _aggregate_ticker_data_for_push(
             # 1:1 ミラー)。FMP 由来で古い行は重複しうるが history[0] は今回報告分で正。
             fiscal_period = _hist[0].get("fiscal_period")
 
+    # ── 5. 機関投資家の保有 (13F・O'Neil "I")。45日遅延の standing シグナル ──────────
+    # aggregator.institutional (純 Python・個社名なし・§38 safe) を SSOT として流用。in-app の
+    #   valuation-extras 機関保有 QoQ 行と同一写像。直近 5 候補 Q を並列 fetch (最新 Q は未提出→
+    #   空→確定 Q が残る)、summarize で直近確定の保有率 + 前期比を集計。None は mailer 側で省略。
+    inst_ownership_pct = inst_ownership_delta_pt = None
+    inst_investors_holding = inst_quarter_label = None
+    try:
+        from .aggregator.institutional import (
+            candidate_quarters as _inst_qs,
+            summarize as _inst_sum,
+        )
+
+        _inst_cands = _inst_qs(5)
+        _inst_raw = await asyncio.gather(
+            *[
+                _agg_client.institutional_holder(ticker, limit=1, year=_y, quarter=_q)
+                for (_y, _q) in _inst_cands
+            ],
+            return_exceptions=True,
+        )
+        _inst_rows = [r[0] for r in _inst_raw if isinstance(r, list) and r]
+        _inst_latest = (_inst_sum(_inst_rows) or {}).get("latest")
+        if _inst_latest and _inst_latest.get("ownershipPercent") is not None:
+            inst_ownership_pct = _inst_latest.get("ownershipPercent")
+            inst_ownership_delta_pt = _inst_latest.get("ownershipDeltaPt")
+            inst_investors_holding = _inst_latest.get("investorsHolding")
+            _inst_date = _inst_latest.get("date")  # "YYYY-MM-DD"
+            if isinstance(_inst_date, str) and len(_inst_date) >= 7:
+                try:
+                    _iy, _im = int(_inst_date[:4]), int(_inst_date[5:7])
+                    inst_quarter_label = f"{_iy}Q{(_im - 1) // 3 + 1}"
+                except ValueError:
+                    inst_quarter_label = None
+    except Exception as e:
+        # 取得失敗は機関保有セクション省略で継続 (他メトリクスは送信)。
+        print(f"[earnings-push][agg] institutional skip for {ticker}: {e}")
+
     return {
         "verdict": verdict,
         "surprise_pct": surprise_pct,
@@ -25007,6 +25044,11 @@ async def _aggregate_ticker_data_for_push(
         "fwd_company_rev_high": fwd_company_rev_high,
         "fwd_company_rev_yoy_low_pct": fwd_company_rev_yoy_low_pct,
         "fwd_company_rev_yoy_high_pct": fwd_company_rev_yoy_high_pct,
+        # 機関投資家の保有 (13F・O'Neil "I"、§38 neutral・None は mailer 側で省略)
+        "inst_ownership_pct": inst_ownership_pct,
+        "inst_ownership_delta_pt": inst_ownership_delta_pt,
+        "inst_investors_holding": inst_investors_holding,
+        "inst_quarter_label": inst_quarter_label,
     }
 
 
@@ -25207,6 +25249,11 @@ async def cron_earnings_notify(
             fwd_company_rev_high=agg.get("fwd_company_rev_high"),
             fwd_company_rev_yoy_low_pct=agg.get("fwd_company_rev_yoy_low_pct"),
             fwd_company_rev_yoy_high_pct=agg.get("fwd_company_rev_yoy_high_pct"),
+            # 機関投資家の保有 (13F・O'Neil "I")
+            inst_ownership_pct=agg.get("inst_ownership_pct"),
+            inst_ownership_delta_pt=agg.get("inst_ownership_delta_pt"),
+            inst_investors_holding=agg.get("inst_investors_holding"),
+            inst_quarter_label=agg.get("inst_quarter_label"),
         )
         fresh_candidates.append(candidate)
         payloads_map[ticker] = payload
