@@ -687,14 +687,11 @@ export default function JudgmentDetail({
                 />
               )}
 
-              {/* ─── On This Page 目次 ─── */}
+              {/* ─── 章ジャンプ目次（sticky 上部バー・自前で border-bottom 保持）─── */}
               <Pane3TOC
                 isNonEquity={isNonEquityV6}
                 detailRoot={v6DetailRoot}
               />
-
-              {/* hairline 区切り */}
-              <hr style={{ height: 1, background: 'var(--border)', border: 0, margin: 0 }} />
 
               {/* ─── L2 決算（ファンダの本丸）─── */}
               {!isNonEquityV6 && (
