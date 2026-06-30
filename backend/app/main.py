@@ -4148,6 +4148,34 @@ def _compute_earnings_metrics(income_data: list, cf_data: list) -> list[dict]:
     return out
 
 
+def _compute_cfps_eps_ratio_from_metrics(em_rows: "list[dict]") -> "tuple[float | None, str | None]":
+    """_compute_earnings_metrics の出力から最新期の CFPS/EPS 比率を算出する純粋関数 (条件5)。
+
+    period は呼び出し側が決める (screener は annual を渡す = headline judge() と一致)。
+    数値物理層 (LLM 不使用)。CFPS>EPS = 利益がキャッシュで裏付けられている = 粉飾リスク低。
+    - em_rows は date 昇順 (_compute_earnings_metrics の sorted 出力) → 末尾から走査し、
+      eps/cfps 両方が非 None の最新期を採用 (最新期が op_cf 欠落でも 1 期遡って救済)。
+    - EPS ≤ 0 のみ clamp して None (eps_non_positive): cfps/eps が CFPS>EPS の真偽と乖離する
+      (例 CFPS=5,EPS=-2 → CFPS>EPS=True だが ratio=-2.5<1.0)。誤った「南京錠」を防ぐ。
+    - CFPS < 0 (EPS>0) は clamp しない: ratio<1.0 が「条件5 未達 (CF が利益を裏付けない)」を
+      正しく表すため有効値として保存する (分母 EPS>0 なら符号は反転しない)。
+    - 戻り値: (ratio, null_reason)。ratio が None のとき null_reason に原因コード、
+      ratio が算出できたとき null_reason=None。
+    - sector guard / 外貨ADR guard は呼び出し側 (_compute_one) が前段で判定する
+      (この関数は与えられた metrics の数値計算のみに責務を限定)。
+    """
+    latest = None
+    for row in reversed(em_rows or []):
+        if isinstance(row, dict) and row.get("cfps") is not None and row.get("eps") is not None:
+            latest = row
+            break
+    if latest is None:
+        return None, "data_missing"
+    if latest["eps"] <= 0:
+        return None, "eps_non_positive"
+    return round(latest["cfps"] / latest["eps"], 4), None
+
+
 async def refresh_earnings_history_for_ticker(ticker: str, api_key: str | None) -> int:
     """単一銘柄の earnings_history を Supabase に upsert。 戻り値: upsert 行数。
 
@@ -20827,6 +20855,9 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
     freshness["next_q_rev_yoy_pct"] = sf_cd
     freshness["next_q_eps_yoy_pct"] = sf_cd
     freshness["tri_verdict"] = sf_cd
+    # 条件5 cfps_eps_ratio も nightly canslim scan 由来 = funda 同源。
+    #   ⚠️ freshness key 欠落で CustomScreenerPanel が条件を silent 非表示にする blocker を再発させない。
+    freshness["cfps_eps_ratio"] = sf_cd
     # Layer A (会社ガイダンス vs PIT コンセンサス比) も nightly canslim scan 由来 = funda 同源。
     #   ⚠️ freshness key 欠落で CustomScreenerPanel が条件を silent 非表示にする blocker を再発させない。
     freshness["guidance_rev_surprise_pct"] = sf_cd
@@ -20861,6 +20892,19 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
                 sf_map[t]["cfps_3y_rising"] = r.get("cfps_3y_rising")
                 # 決算期混同ガード Sprint 2: 直近決算の報告日 (migration 未適用なら別 fetch が空 → None)。
                 sf_map[t]["last_report_date"] = r.get("last_report_date")
+        # ── 条件5 cfps_eps_ratio: 独立 fetch で graceful merge ──────────────────────
+        # ★ feedback_paged_select_missing_column_trap 回避: 共有 SELECT に混ぜると
+        #   migration 未適用 (カラム無し) で全 fundamentals が silent 消失する。独立 fetch なら
+        #   _fetch_all_rows_paged が例外を握り空 list → cfps_eps_ratio のみ None (既存無傷)。
+        #   0 FMP call (Supabase read のみ)。
+        for r in _fetch_all_rows_paged(
+            sb, "screener_fundamentals",
+            "ticker,cfps_eps_ratio",
+            eq={"calc_date": sf_cd},
+        ):
+            t = str(r.get("ticker") or "").upper()
+            if t and t in sf_map:
+                sf_map[t]["cfps_eps_ratio"] = r.get("cfps_eps_ratio")
         # 決算速報ハイブリッド Sprint 2 (SPEC §13): 新7フィールドも別 fetch で graceful merge。
         # ★ 共有 SELECT に混ぜない: 1 カラム欠落 (migration 未適用) で全 fundamentals が
         #   silent 消失する罠 (feedback_paged_select_missing_column_trap) を回避するため独立 fetch。
@@ -22437,6 +22481,7 @@ def _upsert_screener_fundamental(
     latest_beat: "bool | None" = None,
     cfps_3y_rising: "bool | None" = None,
     last_report_date: "str | None" = None,
+    cfps_eps_ratio: "float | None" = None,  # 条件5: 直近Q CFPS/EPS 比率 (粉飾リスク低指標)
     # ── 決算速報ハイブリッド (SPEC 2026-06-27 §13-D): 新7フィールド ──────────────
     rev_yoy_pct: "float | None" = None,
     rev_beat: "str | None" = None,
@@ -22567,6 +22612,11 @@ def _upsert_screener_fundamental(
     # optional_cols fallback: migration 未適用時はカラム除外して再 upsert (graceful)。
     if last_report_date is not None:
         row["last_report_date"] = last_report_date
+    # ── 条件5: cfps_eps_ratio (直近Q CFPS/EPS 比率) ──────────────────────────────
+    # None-preserve: sector guard / 外貨ADR / EPS≤0 clamp / 欠損 → None を渡して payload に含めない。
+    # optional_cols fallback: migration 未適用時はカラム除外して再 upsert (graceful)。
+    if cfps_eps_ratio is not None:
+        row["cfps_eps_ratio"] = cfps_eps_ratio
     # ── 決算速報ハイブリッド (SPEC 2026-06-27 §13): 新7フィールド ─────────────────
     # None-preserve: 欠損 / guard 発動 / 判定不能 → None を渡して payload に含めない。
     # optional_cols fallback: migration 未適用時はカラム除外して再 upsert (graceful)。
@@ -22616,6 +22666,7 @@ def _upsert_screener_fundamental(
                 "rev_3y_rising",          # 単調増加判定: migration 未適用時の graceful fallback
                 "latest_beat",            # beat 判定: migration 未適用時の graceful fallback
                 "cfps_3y_rising",         # 単調増加判定: migration 未適用時の graceful fallback
+                "cfps_eps_ratio",         # 条件5 CFPS>EPS: migration 未適用時の graceful fallback
                 "last_report_date",       # 決算期混同ガード: migration 未適用時の graceful fallback
                 "rev_yoy_pct",            # 決算速報: migration 未適用時の graceful fallback
                 "rev_beat",               # 決算速報: migration 未適用時の graceful fallback
@@ -23102,34 +23153,35 @@ async def cron_canslim_scan(
         ★ 営業CFマージン = income-statement(quarter,limit=4) から revenue を取得して TTM 計算。
         ★ #1 OCF>純利益 = income-statement(quarter,limit=4) の netIncome を流用 (追加 fetch ゼロ)。
 
-        ★★ tuple arity: 全 return 文が 19 要素であること (決算期混同ガード Sprint 1 で
-           last_report_date 追加、feedback_pge_loop_pitfalls ルール 1)。
+        ★★ tuple arity: 全 return 文が 21 要素であること (条件5 cfps_eps_ratio を
+           last_report_date と err の間に追加・Priority 3、flash dict は末尾、
+           feedback_pge_loop_pitfalls ルール 1)。
         return (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct,
                 buyback_yield, volume_surge_pct, inst_holders_qoq_pct,
                 ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome,
                 eps_3y_rising, rev_3y_rising, latest_beat, cfps_3y_rising,
-                last_report_date, err, null_reasons)
-        ※ error path は null_reasons={} (upsert されないため空でよい)、success path のみ実 dict。
+                last_report_date, cfps_eps_ratio, err, null_reasons, flash)
+        ※ error path は null_reasons={} / flash={} (upsert されないため空でよい)、success path のみ実 dict。
         """
         try:
             # ── C 条件: EPS YoY% ─────────────────────────────────────────────
             try:
                 surprises_raw = await client.earnings_surprises(ticker, limit=8)
             except Exception:
-                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "earnings_surprises_failed", {}, {}
+                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "earnings_surprises_failed", {}, {}
             if not surprises_raw:
-                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "earnings_surprises_empty", {}, {}
+                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "earnings_surprises_empty", {}, {}
 
             surprises_past = [s for s in surprises_raw if _has_eps_actual(s)]
             if not surprises_past:
-                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "no_eps_actual_in_surprises", {}, {}
+                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "no_eps_actual_in_surprises", {}, {}
 
             latest = sorted(
                 surprises_past, key=lambda d: d.get("date") or "", reverse=True
             )[0]
             entry_date_str = latest.get("date") or ""
             if not entry_date_str:
-                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "no_entry_date", {}, {}
+                return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "no_entry_date", {}, {}
             eps_actual = _safe_eps_float(
                 latest.get("eps")
                 or latest.get("epsActual")
@@ -23662,13 +23714,17 @@ async def cron_canslim_scan(
             except Exception:
                 latest_beat = None
 
-            # ── 単調増加判定: cfps_3y_rising (CFPS = 営業CF/希薄化株式数、+1 API call: annual cash flow) ──
-            # user 承認の annual CF 方式 (eps_3y_rising と対称な厳密「3 年連続増加」)。
+            # ── 単調増加判定 cfps_3y_rising + 条件5 cfps_eps_ratio (共に annual CF 方式) ──
+            # user 承認の annual CF 方式。cfps_3y_rising = eps_3y_rising と対称な厳密「3年連続増加」、
+            #   cfps_eps_ratio (下ブロック) = 最新年 CFPS/EPS 比率 (headline judge() と同じ annual)。
             # diluted_shares は annual_recs (income、A 条件で fetch 済) を date で join、
-            #   operatingCashFlow は annual cash flow を新規 fetch (+1 FMP call/銘柄/夜)。
-            # CFPS = operatingCashFlow / weightedAverageShsOutDil。_compute_earnings_metrics (L3953) と同流儀。
+            #   operatingCashFlow は annual cash flow を新規 fetch (+1 FMP call/銘柄/夜、両条件で共有)。
+            # CFPS = operatingCashFlow / weightedAverageShsOutDil。_compute_earnings_metrics と同流儀。
             # None-preserve: 有効 CFPS < 4 期 → None (False でない、_calc_monotonic_rising 契約)。
             cfps_3y_rising: "bool | None" = None
+            cfps_eps_ratio: "float | None" = None
+            cfps_eps_null_reason: "str | None" = None
+            cf_annual: list = []  # 下の cfps_eps_ratio ブロックで流用 (スコープ保証)
             try:
                 cf_annual = await client.cash_flow(ticker, limit=4, period="annual")
                 if (
@@ -23704,6 +23760,43 @@ async def cron_canslim_scan(
             except Exception:
                 cfps_3y_rising = None
 
+            # ── 条件5: cfps_eps_ratio (最新年 annual CFPS / EPS、粉飾リスク低指標) ──────────
+            # ★ periodicity = annual。headline judge() (main.py の _analyze_core が
+            #   period="annual" で fetch、 periods[-3:] の最新年で cond5 を判定) と同じ時間軸に
+            #   揃え、「screener 達成 ≠ 分析画面 verdict」の Trust Cliff を回避する
+            #   (multi-review CRITICAL 指摘・金融 verdict: 単期は運転資本変動で偽陽性)。
+            #   兄弟列 cfps_3y_rising (annual) / ocf_gt_netincome (TTM) とも時間軸が揃う。
+            # CFPS = operatingCashFlow / weightedAverageShsOutDil。analysis 側 条件5 と同一定義
+            #   (_compute_earnings_metrics 再利用) で値も一致。> 1.0 ⟺ CFPS > EPS (条件5 達成)。
+            # 追加 FMP call ゼロ: annual_recs (A 条件 fetch 済) + cf_annual (上の cfps_3y_rising
+            #   ブロックで fetch 済) を再利用。
+            # None-preserve: sector guard / 外貨ADR / EPS≤0 clamp / データ欠落 → None。
+            try:
+                if _roe_sector_guard(sector, industry):
+                    # 銀行/保険/REIT/証券等は CF 構造が特殊で CFPS>EPS がザル化 (金融 verdict §0-3)
+                    cfps_eps_null_reason = "sector_guard"
+                else:
+                    _ar0 = (
+                        annual_recs[0]
+                        if (isinstance(annual_recs, list) and annual_recs and isinstance(annual_recs[0], dict))
+                        else {}
+                    )
+                    _cur = _ar0.get("reportedCurrency") or "USD"
+                    if _cur and str(_cur).upper() != "USD":
+                        # 外貨 ADR guard: income-statement の通貨ミスマッチ防止
+                        cfps_eps_null_reason = "adr_currency"
+                    else:
+                        # 数値計算は純粋関数 _compute_cfps_eps_ratio_from_metrics に委譲
+                        # (最新期採用 / EPS≤0 clamp / None-preserve、単体テスト可能)。
+                        _em_annual = _compute_earnings_metrics(
+                            annual_recs if isinstance(annual_recs, list) else [],
+                            cf_annual if isinstance(cf_annual, list) else [],
+                        )
+                        cfps_eps_ratio, cfps_eps_null_reason = _compute_cfps_eps_ratio_from_metrics(_em_annual)
+            except Exception:
+                cfps_eps_ratio = None
+                cfps_eps_null_reason = "data_missing"
+
             # ── S5a: null_reason per-cause を組み立て (静的コード、LLM 不使用) ──
             #   success path のみ upsert される (error path は err を立てて post-gather で continue)。
             #   原因コードは frontend (S5b) が静的 dict で UI ラベル化。§38/§5: 予測語/最上級なし。
@@ -23735,6 +23828,8 @@ async def cron_canslim_scan(
                 null_reasons["latest_beat"] = "no_estimate_or_actual"
             if cfps_3y_rising is None:
                 null_reasons["cfps_3y_rising"] = "insufficient_annual_history"
+            if cfps_eps_ratio is None:
+                null_reasons["cfps_eps_ratio"] = cfps_eps_null_reason or "data_missing"
 
             # ── 決算速報ハイブリッド (SPEC 2026-06-27 §13): 7フィールド算出 ──────────────
             #   rev_yoy_pct / rev_beat / eps_beat / gross_margin_pct /
@@ -23931,25 +24026,26 @@ async def cron_canslim_scan(
                 print(f"[earnings_flash] compute failed for {ticker}: {_fl_e}")
                 flash = {}
 
-            # ★★ tuple arity 20 要素 (flash dict を null_reasons の後に追加・決算速報ハイブリッド
-            #    SPEC 2026-06-27 §13。flash = {rev_yoy_pct, rev_beat, eps_beat, gross_margin_pct,
+            # ★★ tuple arity 21 要素 (条件5 cfps_eps_ratio を last_report_date と err の間に
+            #    追加・Priority 3。flash dict は末尾・決算速報ハイブリッド SPEC 2026-06-27 §13。
+            #    flash = {rev_yoy_pct, rev_beat, eps_beat, gross_margin_pct,
             #    next_q_rev_yoy_pct, next_q_eps_yoy_pct, tri_verdict} の dict、error path は {})
-            #    (last_report_date を cfps_3y_rising と err の間に追加・決算期混同ガード Sprint 1)
             #    (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround,
             #     near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct,
             #     ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome,
             #     eps_3y_rising, rev_3y_rising, latest_beat, cfps_3y_rising,
-            #     last_report_date, err, null_reasons)
+            #     last_report_date, cfps_eps_ratio, err, null_reasons, flash)
             return (
                 ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround,
                 near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct,
                 ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome,
                 eps_3y_rising, rev_3y_rising, latest_beat, cfps_3y_rising,
                 (entry_date_str[:10] if entry_date_str else None),  # last_report_date: 直近決算の報告日
+                cfps_eps_ratio,  # 条件5: 最新年 CFPS/EPS 比率 (粉飾リスク低指標、None-preserve)
                 None, null_reasons, flash,  # flash = 決算速報7フィールド dict (SPEC §13)
             )
         except Exception as e:
-            return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, f"unexpected: {e}", {}, {}
+            return ticker, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, f"unexpected: {e}", {}, {}
 
     # fetch + 計算: worker_count>1 で並列 (asyncio.Semaphore)、 =1 で逐次。
     # ★ 6体合議 critical 対応: 旧実装は完全逐次で full universe (3000) で GHA timeout (30min) 超過
@@ -23976,12 +24072,12 @@ async def cron_canslim_scan(
             results.append(await _compute_one(ticker))
 
     # count + upsert (post-gather 逐次、 cup-scan と同型)
-    # tuple arity 19 要素 (last_report_date を cfps_3y_rising と err の間に追加・決算期混同ガード Sprint 1)
+    # tuple arity 21 要素 (cfps_eps_ratio を last_report_date と err の間に追加・Priority 3、flash 末尾)
     # (ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct,
     #  buyback_yield, volume_surge_pct, inst_holders_qoq_pct,
     #  ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome,
     #  eps_3y_rising, rev_3y_rising, latest_beat, cfps_3y_rising,
-    #  last_report_date, err, null_reasons)
+    #  last_report_date, cfps_eps_ratio, err, null_reasons, flash)
     # Phase 3 Sprint 4a: post-gather で ×100 して pct 新カラム値を生成
     #   near_high_pct_scaled = near_high_pct × 100 (例 0.97 → 97.0)
     #   buyback_yield_pct    = buyback_yield  × 100 (例 0.0173 → 1.73)
@@ -23998,7 +24094,7 @@ async def cron_canslim_scan(
     latest_beat_computed = 0  # latest_beat が算出できた件数
     cfps_3y_rising_computed = 0  # cfps_3y_rising が算出できた件数
     for result in results:
-        ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct, ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome, eps_3y_rising, rev_3y_rising, latest_beat, cfps_3y_rising, last_report_date, err, null_reasons, flash = result
+        ticker, eps_yoy_pct, eps_cagr_3y, roe, turnaround, near_high_pct, buyback_yield, volume_surge_pct, inst_holders_qoq_pct, ocf_margin_pct, fcf_margin_pct, ocf_gt_netincome, eps_3y_rising, rev_3y_rising, latest_beat, cfps_3y_rising, last_report_date, cfps_eps_ratio, err, null_reasons, flash = result
         if err:
             failed.append({"ticker": ticker, "reason": err})
             continue
@@ -24067,6 +24163,7 @@ async def cron_canslim_scan(
                 rev_3y_rising=rev_3y_rising,         # 単調増加判定: revenue 直近4期
                 latest_beat=latest_beat,            # beat 判定: 直近決算が予想を上回ったか
                 cfps_3y_rising=cfps_3y_rising,      # 単調増加判定: CFPS 直近4期 (annual CF)
+                cfps_eps_ratio=cfps_eps_ratio,      # 条件5: 直近Q CFPS/EPS 比率 (粉飾リスク低指標)
                 last_report_date=last_report_date,  # 決算期混同ガード: 直近決算の報告日
                 rev_yoy_pct=flash.get("rev_yoy_pct"),                # 決算速報: 売上YoY
                 rev_beat=flash.get("rev_beat"),                      # 決算速報: 売上 vs予想
