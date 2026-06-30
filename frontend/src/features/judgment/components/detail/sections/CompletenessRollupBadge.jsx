@@ -12,8 +12,9 @@
  *   [B-1] 完了・品質を示す動詞 (確認済/検証済/保証/クリア/合格/完了) を**全廃**。「取得した source の件数」
  *         という事実の名詞表現に限定する。「取得成功 ≠ 数値が正しい ≠ 投資判断の正しさ」 の境界を文言で守る
  *         (取得=process、評価でない)。これが優良誤認 (景表法§5) を避ける核心。
- *   [B-2] 名乗り範囲を**実際に sources を読めている2クラスタ (決算データ / 地合い) に厳密一致**。全称語
- *         (漏れなく/全/すべて) を1語も使わない。5条件/ガイダンス/機関は別 backlog で未配線のため含めない。
+ *   [B-2] 名乗り範囲を**実際に sources を読めている3クラスタ (決算データ / 地合い / 機関保有) に厳密一致**。
+ *         全称語 (漏れなく/全/すべて) を1語も使わない。機関保有 = valuation-extras sources.institutional を
+ *         配線済 (2026-07-01)。5条件/ガイダンスは別 backlog で未配線のため含めない。
  *   [B-3] ok / 取得失敗 / 非該当 (該当データなし) の3状態を物理区別。empty(=非該当) を「欠落」 と出さない
  *         (新規上場で前年同期なし・銀行に粗利率なし等が正常なのに誤警告になる、qa B-3)。
  *   [B-4] 色中立 invariant: gain緑/loss赤/warning琥珀 を一切使わない (verdict 的に読まれる)。取得失敗も
@@ -24,7 +25,10 @@
  * データ規律 (feedback_data_completeness_guard):
  *   - quarterly-history `sources` = {earnings_surprises, income_q, cash_flow_q} = ok|empty|error
  *   - technical `patterns.{cup_handle,rs}.spy_unavailable` (bool) = 地合い (SPY) 取得状況
- *   - どちらも dedupGet 化済 → EarningsFlashSummary / StockPriceChart の既存 fetch と coalesce (追加 fetch なし)
+ *   - valuation-extras `sources.institutional` (ok|empty|error|timeout) = 機関保有 (13F)。親 JudgmentDetail が
+ *     既に fetch・state 管理済のため **prop で受領 (追加 fetch なし)**。未渡し/null は classifyInstitutional が
+ *     unknown 化 → present から除外 (B-5: loading 中に「欠落あり」 と誤表示しない)。
+ *   - quarterly-history / technical は dedupGet 化済 → 既存 fetch と coalesce (追加 fetch なし)
  *
  * 設計境界: 新規 glow host (.panel-card/.bs-panel/.surface-card) を作らない (class なし div + semantic token のみ)。
  *   module-level component (inline 関数 component 禁止 = feedback_pane_error_boundary)。
@@ -42,6 +46,7 @@ import {
   MARKET_FAILED_NOTE,
   classifyEarnings,
   classifyMarket,
+  classifyInstitutional,
   buildPresent,
   buildRollup,
 } from '../../../constants/completenessLedger.js';
@@ -98,8 +103,10 @@ function AuditRow({ clusterKey, row }) {
 /**
  * @param {object} props
  * @param {string|null} props.ticker - 選択中の ticker
+ * @param {object|null} [props.valuationExtras] - 親 JudgmentDetail が fetch 済の valuation-extras レスポンス
+ *   (sources.institutional から機関保有クラスタを分類。未渡し=未 fetch/非該当は unknown 化で除外)。
  */
-export default function CompletenessRollupBadge({ ticker }) {
+export default function CompletenessRollupBadge({ ticker, valuationExtras }) {
   const [sources, setSources] = useState(undefined); // quarterly-history sources (null=取得失敗)
   const [spyUnavailable, setSpyUnavailable] = useState(undefined); // bool | null
   const [resolved, setResolved] = useState({ qh: false, tech: false });
@@ -157,8 +164,11 @@ export default function CompletenessRollupBadge({ ticker }) {
 
   const earnings = classifyEarnings(sources);
   const market = classifyMarket(spyUnavailable);
+  // 機関保有 (13F)。親が渡す valuation-extras の sources.institutional から分類。未 fetch/非該当は
+  // unknown 化され present から除外される (追加 fetch なし・additive)。
+  const institutional = classifyInstitutional(valuationExtras?.sources?.institutional);
   // present = 取得状況が判明したクラスタ (unknown は除外)。ok / failed / na を含む = ドリルダウン対象。
-  const present = buildPresent(earnings, market);
+  const present = buildPresent(earnings, market, institutional);
 
   // errored: 両クラスタとも取得状況が不明 (fetch は返ったが sources 無し) → 誤情報を出さず静かに非表示。
   if (present.length === 0) {

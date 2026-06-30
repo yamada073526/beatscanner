@@ -19,6 +19,7 @@ import assert from 'node:assert/strict';
 import {
   classifyEarnings,
   classifyMarket,
+  classifyInstitutional,
   buildPresent,
   buildRollup,
 } from '../completenessLedger.js';
@@ -166,6 +167,82 @@ check('§38: 文言に完了/品質/verdict 語・全称語が無い (全 combo 
     for (const w of BANNED) {
       assert.ok(!r.text.includes(w), `禁止語「${w}」 が rollup に: ${r.text}`);
     }
+  }
+});
+
+// ── 3. 機関保有クラスタ (13F): 4 値 (ok|empty|error|timeout) + undefined 網羅 + 沈黙の欠落 0件 ──
+// 最重要 = 'timeout' が failed に表面化するか (3 値マッピング流用だと unknown に落ち present から消える blocker)。
+const INST_VALUES = ['ok', 'empty', 'error', 'timeout', undefined];
+const OK_EARNINGS = { earnings_surprises: 'ok', income_q: 'ok', cash_flow_q: 'ok' };
+let instSilentGaps = 0;
+const instSilentSamples = [];
+for (const v of INST_VALUES) {
+  const inst = classifyInstitutional(v);
+  if ((v === 'error' || v === 'timeout') && inst.status !== 'failed') {
+    instSilentGaps += 1; instSilentSamples.push({ v, why: `${v}→${inst.status} (failed であるべき)` });
+  }
+  if (v === 'empty' && inst.status !== 'na') {
+    instSilentGaps += 1; instSilentSamples.push({ v, why: `empty→${inst.status} (na であるべき)` });
+  }
+  if (v === 'ok' && inst.status !== 'ok') {
+    instSilentGaps += 1; instSilentSamples.push({ v, why: `ok→${inst.status}` });
+  }
+  // row status は cluster status と一致 (単一 row クラスタ)。
+  if (inst.rows[0].status !== inst.status) {
+    instSilentGaps += 1; instSilentSamples.push({ v, why: `row status ${inst.rows[0].status} ≠ cluster ${inst.status}` });
+  }
+  // present 混入: undefined(unknown) は除外、ok/empty/error/timeout は1クラスタとして残る。
+  const present = buildPresent(classifyEarnings(OK_EARNINGS), classifyMarket(false), inst);
+  const hasInst = present.some((c) => c.key === 'institutional');
+  if (v === undefined && hasInst) {
+    instSilentGaps += 1; instSilentSamples.push({ v, why: 'undefined なのに present 混入' });
+  }
+  if (v !== undefined && !hasInst) {
+    instSilentGaps += 1; instSilentSamples.push({ v, why: `${v} なのに present 欠落 (沈黙の欠落)` });
+  }
+}
+check(`機関保有 ${INST_VALUES.length} 値網羅: 沈黙の欠落 0件 (timeout→failed 含む)`, () => {
+  assert.equal(instSilentGaps, 0, `沈黙の欠落 ${instSilentGaps}件: ${JSON.stringify(instSilentSamples)}`);
+});
+
+check('機関保有 timeout → failed (3値コピーで unknown 落ち = 沈黙の欠落 を防ぐ最重要 blocker)', () => {
+  const i = classifyInstitutional('timeout');
+  assert.equal(i.status, 'failed');
+  assert.equal(i.rows[0].status, 'failed');
+});
+
+check('機関保有 ok → rollup「決算データ・地合い・機関保有を自動取得」', () => {
+  const r = buildRollup(buildPresent(classifyEarnings(OK_EARNINGS), classifyMarket(false), classifyInstitutional('ok')));
+  assert.equal(r.text, '決算データ・地合い・機関保有を自動取得');
+});
+
+check('機関保有 empty → na、rollup「機関保有は該当なし」(13F 非対象を欠落警告にしない)', () => {
+  const i = classifyInstitutional('empty');
+  assert.equal(i.status, 'na');
+  const r = buildRollup(buildPresent(classifyEarnings(OK_EARNINGS), classifyMarket(false), i));
+  assert.ok(r.text.includes('機関保有は該当なし'), `text=${r.text}`);
+});
+
+check('機関保有 error → failed、rollup「機関保有データ未取得」', () => {
+  const i = classifyInstitutional('error');
+  assert.equal(i.status, 'failed');
+  const r = buildRollup(buildPresent(classifyEarnings(OK_EARNINGS), classifyMarket(false), i));
+  assert.ok(r.text.includes('機関保有データ未取得'), `text=${r.text}`);
+});
+
+check('機関保有 undefined (未 fetch) → present から除外 + 2-arg buildPresent 後方互換', () => {
+  const present = buildPresent(classifyEarnings(OK_EARNINGS), classifyMarket(false), classifyInstitutional(undefined));
+  assert.ok(!present.some((c) => c.key === 'institutional'), `present=${JSON.stringify(present.map((c) => c.key))}`);
+  // institutional 引数を渡さない従来呼出も従来通り 2 クラスタ (回帰なし)。
+  const present2 = buildPresent(classifyEarnings(OK_EARNINGS), classifyMarket(false));
+  assert.equal(present2.length, 2);
+});
+
+check('§38: 機関保有クラスタ込みでも rollup に禁止語なし (全 INST 値)', () => {
+  const BANNED = ['確認済', '検証済', '保証', '合格', 'クリア', '買い', '売り', '漏れなく', '全規律', 'すべて', '網羅'];
+  for (const v of INST_VALUES) {
+    const r = buildRollup(buildPresent(classifyEarnings(OK_EARNINGS), classifyMarket(false), classifyInstitutional(v)));
+    for (const w of BANNED) assert.ok(!r.text.includes(w), `禁止語「${w}」: ${r.text}`);
   }
 });
 
