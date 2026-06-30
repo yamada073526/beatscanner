@@ -58,13 +58,15 @@ nightly_canslim → _build_layer_a_maps (main.py:22515)
 ### Phase 3 — universe カバレッジ (任意・投資対効果次第)
 - guidance cron の universe (≤200) 拡張を検討。EDGAR rate + Haiku cost とのトレードオフ。screener 全2500 毎晩は非現実的 → 「直近決算 + 主要銘柄」に絞る現設計は妥当。部分カバレッジ受容。
 
-### Phase 4 — EPS basis 優先抽出の改善 (backlog・§38 risk なし・data completeness)
+### Phase 4 — EPS basis 優先抽出の改善 (✅ 実装済 2026-07-01・§38 risk なし・data completeness)
 > 2026-07-01 §38 per-source verify (MU/JBL/SNX/BB/CNXC・全件 PASS) で発見。memory [[feedback-sec-guidance-8k-coverage-limit]] 参照。
 - **症状**: GAAP・Non-GAAP EPS guidance を両方開示する企業 (MU: GAAP $30.73±1 / NonGAAP $31.00±1、SNX: GAAP $3.40-3.90 / NonGAAP $4.25-4.75) で、`visualizer/sec_guidance.py` の Haiku が **GAAP を抽出** → eps_basis='gaap' → consensus (non-GAAP 基準) と mismatch → `_compute_layer_a_surprise` (main.py ~22781) の GAAP 抑止発動 → EPS null。
 - **影響**: surprise を過小に出す方向で §38 安全 (偽 positive なし)。ただし non-GAAP guidance を優先すれば SNX は +約12%・MU ~0% の EPS signal を出せた = **data completeness 取りこぼし**。
 - **改善案**: sec_guidance prompt の EPS 抽出ルールを「GAAP・Non-GAAP 両記載時は **Non-GAAP (adjusted) を優先**」へ調整 (consensus が non-GAAP 基準のため basis 一致)。BB/CRWD の non-GAAP 主流前提とも整合。
 - **検証**: 両記載銘柄 (MU/SNX) で eps_basis='non_gaap' + EPS surprise 復活を確認。non-GAAP guidance vs non-GAAP consensus は basis 一致で偽 surprise risk なし。
 - **優先度**: 低 (現状 §38 安全・取りこぼしのみ)。LP「ガイダンス」訴求 unlock 時にまとめて対応で可。
+- **✅ 実装 (2026-07-01)**: `sec_guidance.py` の (a) `_SYSTEM_STATIC` rule 5 に「GAAP・non-GAAP 両記載時は non-GAAP のレンジを優先抽出 (basis=non_gaap)・数値の選択であって計算でない」を追記、(b) q_eps/fy_eps schema の basis description にも同旨を追記。計算ロジック (`_compute_layer_a_surprise` 等) は不変・下流の GAAP 抑止 (basis!="gaap") もそのまま (真の GAAP-only 銘柄では正しく抑止)。Layer A pytest 23 passed。
+  - ⚠️ **遡及しない**: prompt 変更は**今後の抽出のみ**に効く。既存 DB 行 (MU/SNX 等) の eps_basis='gaap' は次回 guidance 再抽出 (nightly_guidance / guidance_backfill) まで残る。本番での EPS surprise 復活確認は再抽出後に持ち越し。
 
 ---
 
