@@ -45,7 +45,10 @@ jobs:
     # 直列 chunk で wall time が伸びる (canslim ~40min + earnings ~18min + cup/rs ~8min ≈ 65min) ため
     # 45→90min に margin。実測 (run 28230519656/28231193357): canslim 500/worker3 は 5min で 502、
     # 300/worker5 は 4:01 で 200 (throughput ~1.24 t/s)。chunk-0 の 3000 universe fetch 分も見て CHUNK=250。
-    timeout-minutes: 90
+    # SPEC 2026-07-01: warmup step (+~数秒-5min) + canslim chunk retry (上限1・最悪 +10min/chunk) の
+    # wall-time 増を見て 90→120min。病的ケース (warmup 失敗 + 複数 chunk retry) でも末尾 Freshness gate
+    # (mega-cap 検知) まで到達させる margin (6 体 ship 前 gate SRE/GHA verdict)。
+    timeout-minutes: 120
     env:
       BASE: https://beatscanner-production.up.railway.app
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
@@ -75,6 +78,30 @@ jobs:
           if [ -z "$CRON_SECRET" ]; then
             echo "::error::CRON_SECRET secret 未設定。 README の gh secret set コマンドで追加してください。"
             exit 1
+          fi
+
+      # SPEC 2026-07-01: chunk-0 (top-250 mega-cap) coverage fix。
+      # cup/canslim/earnings-annual の chunk 0 (offset=0) が _fetch_market_cap_top_n の cache miss を
+      # per-ticker 処理と同じ 5min gateway 窓で背負い 502 → mega-cap 全カラムが nightly で欠落していた。
+      # 最初の重い consumer (cup-scan) の前に universe cache を prime し全 chunk を cache hit にする。
+      # warmup は per-ticker を持たず universe fetch のみ = 数秒想定。502 でも job は落とさない
+      # (後続 chunk 0 が cache miss を吸収する graceful 設計)。elapsed_sec で warmup 単独 wall-time を監視。
+      - name: Universe cache warmup (chunk-0 502 fix)
+        continue-on-error: true
+        run: |
+          echo "=== universe cache warmup ==="
+          resp=$(curl -s --max-time 300 -w '\nHTTP:%{http_code}\nTIME:%{time_total}' -X POST \
+            -H "X-Cron-Secret: $CRON_SECRET" -H 'Content-Type: application/json' \
+            -d "$BODY" "$BASE/api/cron/canslim-warmup")
+          http=$(echo "$resp" | grep '^HTTP:' | sed 's/HTTP://')
+          ttime=$(echo "$resp" | grep '^TIME:' | sed 's/TIME://')
+          jbody=$(echo "$resp" | sed '/^HTTP:/d; /^TIME:/d')
+          primed=$(echo "$jbody" | jq -r '.primed_count // 0' 2>/dev/null || echo 0)
+          elapsed=$(echo "$jbody" | jq -r '.elapsed_sec // 0' 2>/dev/null || echo 0)
+          echo "  [warmup] http=$http primed=$primed elapsed_sec=$elapsed curl_time=${ttime}s"
+          echo "### universe warmup: http=\`$http\` primed=\`$primed\` elapsed=\`${elapsed}s\` (curl ${ttime}s)" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$http" != "200" ]; then
+            echo "::warning::universe warmup が HTTP $http。chunk 0 が cache miss を背負う可能性 (後続 freshness gate で mega-cap 欠落を検知)。"
           fi
 
       - name: Cup-with-Handle scan
@@ -176,18 +203,30 @@ jobs:
           t_proc=0; t_eps=0; t_ups=0; offset=0; last_http=000
           while [ "$offset" -lt "$UNIVERSE" ]; do
             cbody=$(echo "$BODY" | jq -c --argjson off "$offset" --argjson lim "$CHUNK" '. + {offset:$off, limit:$lim}')
-            resp=$(curl -s --max-time 600 -w '\nHTTP:%{http_code}' -X POST \
-              -H "X-Cron-Secret: $CRON_SECRET" -H 'Content-Type: application/json' \
-              -d "$cbody" "$BASE/api/cron/canslim-scan")
-            http=$(echo "$resp" | tail -1 | sed 's/.*HTTP://')
-            body=$(echo "$resp" | sed '$d')
-            proc=$(echo "$body" | jq -r '.processed_count // 0' 2>/dev/null || echo 0)
-            eps_ok=$(echo "$body" | jq -r '.eps_computed_count // 0' 2>/dev/null || echo 0)
-            ups=$(echo "$body" | jq -r '.upserted_count // 0' 2>/dev/null || echo 0)
+            # SPEC 2026-07-01: chunk (特に chunk 0) が 502 or processed=0 のとき最大 1 回 retry。
+            # retry の「最終結果だけ」を total に加算 (二重加算回避)。retry 常時発火 = warmup/根治が
+            # 効いていない検知信号 (::warning::)。per-ticker upsert は idempotent のため再試行は安全。
+            attempt=1; max_attempts=2; http=000; proc=0; eps_ok=0; ups=0
+            while [ "$attempt" -le "$max_attempts" ]; do
+              resp=$(curl -s --max-time 600 -w '\nHTTP:%{http_code}' -X POST \
+                -H "X-Cron-Secret: $CRON_SECRET" -H 'Content-Type: application/json' \
+                -d "$cbody" "$BASE/api/cron/canslim-scan")
+              http=$(echo "$resp" | tail -1 | sed 's/.*HTTP://')
+              body=$(echo "$resp" | sed '$d')
+              proc=$(echo "$body" | jq -r '.processed_count // 0' 2>/dev/null || echo 0)
+              eps_ok=$(echo "$body" | jq -r '.eps_computed_count // 0' 2>/dev/null || echo 0)
+              ups=$(echo "$body" | jq -r '.upserted_count // 0' 2>/dev/null || echo 0)
+              if [ "$http" = "200" ] && [ "$proc" -gt 0 ]; then break; fi
+              if [ "$attempt" -lt "$max_attempts" ]; then
+                echo "::warning::canslim-scan chunk offset=$offset attempt=$attempt 失敗 (http=$http processed=$proc) — retry (chunk-0 fix の保険; 常時発火なら warmup/根治が効いていない信号)。"
+                sleep $((attempt * 5))
+              fi
+              attempt=$((attempt + 1))
+            done
             echo "  [canslim] offset=$offset/$UNIVERSE http=$http processed=$proc eps_computed=$eps_ok upserted=$ups"
             if [ "$http" != "200" ]; then
-              echo "::warning::canslim-scan chunk offset=$offset が HTTP $http (gateway timeout の可能性。Freshness gate で DB を真とする)。"
-              echo "### ⚠️ canslim-scan chunk offset=\`$offset\` HTTP \`$http\`" >> "$GITHUB_STEP_SUMMARY"
+              echo "::warning::canslim-scan chunk offset=$offset が HTTP $http (retry 後も。Freshness gate で DB を真とする)。"
+              echo "### ⚠️ canslim-scan chunk offset=\`$offset\` HTTP \`$http\` (retry 後)" >> "$GITHUB_STEP_SUMMARY"
             fi
             t_proc=$((t_proc + proc)); t_eps=$((t_eps + eps_ok)); t_ups=$((t_ups + ups))
             last_http=$http; offset=$((offset + CHUNK))
@@ -269,6 +308,31 @@ jobs:
           }
           # CAN-SLIM は canslim_only / 通常 nightly の両モードで走るため常に判定。
           chk "CAN-SLIM as_of"                        "$BASE/api/scanner/canslim?limit=1"              ".as_of"
+          # SPEC 2026-07-01: chunk-0 (top-250 mega-cap) coverage の hard-fail 検知。
+          # 既存 as_of chk は全体の MAX(calc_date) を見るため chunk 0 だけ欠落しても PASS する盲点がある
+          # (chunk 1-10 が成功すれば as_of は新鮮)。canonical mega-cap の cfps_eps_ratio non-null を直接見て
+          # chunk-0 到達を検証する。read endpoint 非対称 (universe に per-ticker calc_date 無し) のため
+          # 「値の存在」を chunk-0 success path 到達の代理指標とする (6 体 review GHA 実 curl 確定)。
+          # 6 銘柄中 過半数 (>=4) が null なら chunk-0 欠落で hard-fail。少数欠損 (1-3、FMP 個別欠損 /
+          # ticker 変更) は warning 止まり (false-positive 抑制、SRE/金融 verdict)。
+          mega_json=$(curl -s --max-time 30 "$BASE/api/scanner/universe?universe_size=3000")
+          mega_null=0; mega_tot=0
+          echo "#### chunk-0 mega-cap cfps coverage (SPEC 2026-07-01)" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ticker | cfps_eps_ratio |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          for t in AAPL MSFT NVDA GOOGL AMZN META; do
+            v=$(echo "$mega_json" | jq -r --arg t "$t" '.items[]|select(.ticker==$t)|.cfps_eps_ratio // "null"' 2>/dev/null)
+            [ -z "$v" ] && v="null"
+            echo "| $t | \`$v\` |" >> "$GITHUB_STEP_SUMMARY"
+            mega_tot=$((mega_tot + 1))
+            if [ "$v" = "null" ]; then mega_null=$((mega_null + 1)); fi
+          done
+          echo "- mega-cap cfps null: \`$mega_null / $mega_tot\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$mega_null" -ge 4 ]; then
+            echo "::error::chunk-0 mega-cap coverage 欠落 ($mega_null/$mega_tot が cfps_eps_ratio=null) — canslim chunk 0 (top-250 mega-cap) が nightly で未処理の疑い。warmup/chunk-0 を調査 (SPEC 2026-07-01)。"; fail=1
+          elif [ "$mega_null" -ge 1 ]; then
+            echo "::warning::mega-cap の一部で cfps_eps_ratio=null ($mega_null/$mega_tot) — 単一銘柄の FMP 個別欠損 / ticker 変更の可能性 (job は落とさない)。"
+          fi
           # issue #27: canslim_only=true (deploy 後 smoke) は cup/rs/notify を skip するため、それらの
           # freshness は判定しない (skip した scan の stale で smoke を偽 fail させない)。通常 nightly のみ全 check。
           CANSLIM_ONLY="${{ inputs.canslim_only }}"

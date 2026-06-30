@@ -223,3 +223,57 @@ gh run view 28439276429 --log | grep -E '\[canslim\] offset='
 5. **aggregator は LLM 不可**（pre-commit Check 3・本 SPEC は aggregator を触らない）
 6. **既存 chunk 化（issue #27 gateway 502 対策）の意図を壊さない**（chunk 機構維持・universe 順序不変・CHUNK 割当不変）
 7. 検証は **ground truth**（pytest + 小 universe / tickers 指定 scan + Supabase DB 直確認 + 全 chunk http=200）。LLM 判定・grep ヒットを「機能した」の証拠にしない
+
+---
+
+## 9. 6 体 design review verdict 反映（2026-07-01 着手前 gate・全員条件付賛成）
+
+着手前 6 体合議（multi-review、reliability 重心: backend reliability / QA-Trust Cliff / SRE を Opus、FMP / GHA / 金融を Sonnet）の結論。**6/6 条件付賛成・反対ゼロ**。方針（a 前処理分離 + b retry 保険 + d freshness gate hard-fail、c 不採用）は維持し、以下を確定。
+
+### 9.1 真因の精密化（コード grounding 3 体一致: backend / FMP / GHA）
+- ②③ batch pre-fetch（yearHigh batch `main.py:23036-23090` / Layer A `23092-23103`）は **chunk slice 後の tickers（250 件）に走る** → chunk 0 でも chunk N でも重さは同じ。
+- chunk 0 固有負荷の本体は **① `_fetch_market_cap_top_n`（3998）の cache miss**（`_BACKTEST_UNIVERSE_CACHE` 24h TTL が未温だと offset=0 が FMP company-screener fetch + `_fetch_sp500_top_n(500)` anchor union を背負う。offset≥250 は同一 process で cache hit）。
+- → **fix のターゲットは ①。②③ には 1 行も触らない（= scope creep 境界）**。
+
+### 9.2 方針 A 一本化（方針 B 削除）
+- 真因が ① cache miss であるため、方針 B（chunk 0 のみ ②③ skip + per-ticker fallback）は **真因を外す**（cache miss は残る）。FMP reviewer: per-ticker fallback は batch_quotes 3 call → 250 call で **429 "Limit Reach" リスク**、Layer A も DB round-trip 250 倍。
+- → **方針 A 固定**: `_fetch_market_cap_top_n` を呼ぶだけの **warmup endpoint**（`/api/cron/canslim-warmup`）を新設し、chunk loop の前に prime して ① cache miss を per-ticker を持たない軽量 step に隔離。`cron_canslim_scan` 本体（②③ 前処理・per-ticker）には触らない。
+
+### 9.3 計測ファースト（Sprint 1 step 0・SRE/QA/backend 必須条件）
+- 「warmup も 502 し得る」懸念（SRE）を潰すため、**warmup endpoint 実装 → deploy → 単独 wall-time を計測**（endpoint が `elapsed_sec` を返す + `curl -w '%{time_total}'`）。X が 5min 予算に対し桁違いに小さいことを定量実証。X が大きければ warmup 内部 chunk 化を追加。
+
+### 9.4 検証規律強化（DoD 修正・QA/金融）
+- 小 universe scan は **false PASS**（前処理が軽く 502 を再現しない）→ **smoke 降格**。本番相当負荷は **full-universe offset=0 を cold cache + wall-clock 測定**で確認。
+- **`processed_count` を主証拠にしない**（processed ≠ upsert）。**DB 直 SELECT（mega-cap の cfps non-null 実数）を唯一の合格軸**。
+- **authed 南京錠トグル ON/OFF で AAPL/MSFT/NVDA が結果に出る**ことを Trust Cliff の最終 gate に追加。
+- 退行は **全カラム突合**（cfps + EPS surprise + Layer A guidance + cup signal + RS 入力）。
+
+### 9.5 freshness gate 設計（GHA 実 curl で確定・Sprint 1 同梱）
+- 🔴 read endpoint 非対称（実 curl 確認）: `/api/scanner/universe` は items に `cfps_eps_ratio` を持つが **per-ticker `calc_date` が無い**（top-level `as_of` のみ）。`/api/scanner/canslim` は per-ticker calc_date はあるが condition 未指定で cfps 不可視。
+- → **「mega-cap の `cfps_eps_ratio` が non-null か」を hard-fail 条件**（値の存在を chunk-0 到達の代理指標に）。日付鮮度は既存 `as_of` chk に委ねる。**新 read endpoint は作らない**（warmup は cron endpoint で別物）。
+- sentinel = **AAPL/MSFT/NVDA/GOOGL/AMZN/META の 6 銘柄、過半数（≥4）が null で hard-fail、少数欠損（1-3）は warning**（単一銘柄の FMP 個別欠損・ticker 変更で誤発火させない。SRE「2/3」+ 金融「3/5 OR」を 6 銘柄に統合）。
+- `$GITHUB_STEP_SUMMARY` に table + 個別 ticker を `::error::` で出力。文言は §38 中立（技術事実のみ・投資判断を示唆しない）。
+
+### 9.6 retry 実装（GHA/SRE/FMP）
+- canslim chunk loop に retry サブループ。**上限 1**（初回 + retry 1。timeout margin 薄い + Sprint1 着地で稀）。OR 判定（`http≠200` or 範囲内 `processed=0`）+ linear backoff。
+- **t_proc/t_eps/t_ups の二重加算回避**（retry の最終結果だけ外側累積に反映）。retry 発火は `::warning::`（= 根治失敗の検知信号）。
+- per-ticker upsert は idempotent（on conflict）のため GHA 排他制御は不要。GHA retry と ②③ 内部 graceful degrade を二重発火させない。
+
+### 9.7 Sprint 構成（user 判断 2026-07-01）
+- **freshness gate（検知層）を Sprint 1 に同梱**（user 選択）。検知不在 window を作らない・gate は `nightly_scan.yml` のみで blast radius 最小・roll-back は workflow revert で済む。→ 本 SPEC は **単一 PR**（warmup + retry + freshness gate）に統合。§5 の Sprint 2 は Sprint 1 に吸収（独立 PR 化しない）。
+
+### 9.8 ship 前 6 体 gate verdict 反映（2026-07-01 PR 直前・6/6 ship 可・反対ゼロ）
+
+実装完成後の ship 前 6 体合議（backend/SRE ship 可、QA/FMP/GHA/金融 条件付 ship 可）。pytest 153 PASS + warmup 4 test + 構文 OK を ground truth 確認の上、以下を反映:
+
+- **warmup default 3000→1000**（backend/FMP）: warmup の russell3000 default を `cron_canslim_scan`（1000）と揃え、手動 curl で body 省略時の `cache_key`（mktcap_top{n}）食い違いを解消。nightly は `$BODY` で 3000 明示のため無影響。
+- **timeout 90→120min**（SRE/GHA）: warmup step + chunk retry の wall-time 増で病的ケース（warmup 失敗 + 複数 chunk retry）でも末尾 Freshness gate（mega-cap 検知）まで到達させる margin。
+- **post-merge gate（QA 必須条件）**: 以下は **merge 前に取得不能**なため PR 説明に明記し、検証完了まで「fix 確定」と報告しない:
+  1. deploy 後 full-universe nightly 相当 run → **Supabase 直 SELECT で AAPL/MSFT/NVDA の cfps_eps_ratio non-null** 確認
+  2. **authed 南京錠トグル ON で 3 銘柄が結果に出る**（Trust Cliff 最終 gate）
+  3. warmup 単独 `elapsed_sec` を実 GHA run で 1 回計測（§9.3 計測ファースト・X が 5min 予算に対し桁違いに小さいことを実証）
+- **フォローアップ TODO（本 PR スコープ外・実害ほぼゼロ）**:
+  - GOOGL/GOOG クラス株 fallback（金融）: sentinel は GOOGL のみ照合。dynamic fetch が GOOG 表記でも anchor union（hardcode に GOOGL/GOOG 両方）で GOOGL が universe に補填されるため実害ほぼゼロ + 過半数判定（≥4）が吸収。将来 `select(.ticker=="GOOGL" or .ticker=="GOOG")` 化を検討。
+  - 能動通知（Slack/PagerDuty）+ mega-cap 欠落率の historical tracking（金融・業界水準への次の改善候補）。
+  - backoff 5s→10s 固定 / 日跨ぎ二重行の calc_date 固定（SRE 任意・現状実害なし）。
+  - canslim-scan の russell3000 default 1000→3000 統一（任意・別 PR・per-ticker endpoint を触るため本 PR では見送り）。
