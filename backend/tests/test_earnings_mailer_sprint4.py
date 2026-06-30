@@ -17,6 +17,7 @@ import re
 import pytest
 
 from app.earnings_mailer import (
+    COMPLETENESS_SOURCE_LABEL,
     COMPLETENESS_STATUS_LABEL,
     EARNINGS_DISCLAIMER_INLINE,
     _build_earnings_html,
@@ -413,6 +414,37 @@ class TestCompletenessLabel:
         for label in COMPLETENESS_STATUS_LABEL.values():
             assert "欠落" not in label
             assert "エラー" not in label
+
+    def test_source_label_institutional_mirror(self):
+        """SOURCE_LABEL の institutional が in-app 完全性台帳の row label と 1:1 mirror。
+
+        completenessLedger.js classifyInstitutional の rows[0].label と一致 (PR#149 B の続き、
+        email 完全性台帳と in-app を再び 1:1 に揃える)。
+        """
+        assert COMPLETENESS_SOURCE_LABEL["institutional"] == "機関投資家の保有（13F）"
+
+    def test_institutional_renders_when_present(self):
+        """completeness に institutional があると HTML / text の取得状況に描画される。"""
+        p = build_earnings_payload(
+            ticker="AAPL",
+            verdict="beat",
+            surprise_pct=5.0,
+            eps_actual=1.5,
+            eps_estimate=1.4,
+            n_of_5=4,
+            conditions=SAMPLE_CONDITIONS,
+            completeness={
+                "earnings_surprises": "ok",
+                "income_q": "ok",
+                "cash_flow_q": "na",
+                "institutional": "ok",
+            },
+            snapshot_jst="2026-07-01T07:00:00+09:00",
+        )
+        html = _build_earnings_html([p])
+        text = _build_earnings_text([p])
+        assert "機関投資家の保有（13F）" in html
+        assert "機関投資家の保有（13F）" in text
 
     def test_completeness_in_html(self):
         """取得状況が HTML に反映されること。"""

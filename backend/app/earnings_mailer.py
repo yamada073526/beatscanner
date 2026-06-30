@@ -108,6 +108,9 @@ COMPLETENESS_SOURCE_LABEL: dict[str, str] = {
     "earnings_surprises": "EPS / 売上サプライズ",
     "income_q": "四半期 損益",
     "cash_flow_q": "四半期 キャッシュフロー",
+    # 機関投資家の保有 (13F・O'Neil "I")。in-app 完全性台帳の institutional クラスタ
+    # row label (completenessLedger.js classifyInstitutional) と 1:1 mirror。
+    "institutional": "機関投資家の保有（13F）",
 }
 
 

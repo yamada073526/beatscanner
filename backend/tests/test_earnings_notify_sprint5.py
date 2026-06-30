@@ -537,6 +537,54 @@ async def test_aggregate_completeness_uses_real_sources():
 
 
 @pytest.mark.asyncio
+async def test_aggregate_completeness_includes_institutional():
+    """完全性台帳に institutional クラスタが合流し in-app (CompletenessRollupBadge) と 1:1。
+
+    写像 (completenessLedger.js classifyInstitutional と同一): 直近確定13F あり→ok /
+    fetch 成功+空→na / 例外→failed。timeout も failed 側 (ここでは例外で代表)。
+    PR#149 B (in-app に機関クラスタ追加) の続きで、email 完全性台帳も再び 1:1 に揃える。
+    """
+    from app.main import _aggregate_ticker_data_for_push
+
+    candidate = {
+        "ticker": "AAPL", "earnings_date": "2025-01-30", "fiscal_period": "Q1 2025",
+        "eps_actual": 2.4, "eps_estimate": 2.0,
+    }
+    mock_analyze = {"passedCount": 3, "conditions": []}
+
+    def _client(inst_mock):
+        c = MagicMock()
+        c.earnings_surprises = AsyncMock(return_value=[{"eps": 2.4}])
+        c.income_statement = AsyncMock(return_value=[{"x": 1}])
+        c.cash_flow = AsyncMock(return_value=[{"x": 1}])
+        c.institutional_holder = inst_mock
+        return c
+
+    async def _run(inst_mock):
+        with patch("app.main._analyze_core", new_callable=AsyncMock, return_value=mock_analyze), \
+             patch("app.main.FMPClient", return_value=_client(inst_mock)), \
+             patch("app.main.guidance_basic", new_callable=AsyncMock, return_value=None), \
+             patch("app.main.guidance_quarterly_history", new_callable=AsyncMock, return_value=None):
+            return await _aggregate_ticker_data_for_push("AAPL", "k", candidate)
+
+    # 直近確定 13F あり → ok (ownershipPercent 取得)
+    ok_rows = [{"date": "2026-03-31", "ownershipPercent": 72.5,
+                "lastOwnershipPercent": 71.0, "investorsHolding": 4200}]
+    agg_ok = await _run(AsyncMock(return_value=ok_rows))
+    assert agg_ok["completeness"]["institutional"] == "ok"
+    assert agg_ok["inst_ownership_pct"] == 72.5  # 描画値も同時に整合
+
+    # fetch 成功だが直近確定 13F なし (ADR / IPO 直後 等) → na (該当データなし)
+    agg_na = await _run(AsyncMock(return_value=[]))
+    assert agg_na["completeness"]["institutional"] == "na"
+    assert agg_na["inst_ownership_pct"] is None  # セクションは省略
+
+    # 全 Q 例外 (timeout 含む取得失敗) → failed (沈黙の欠落にしない)
+    agg_fail = await _run(AsyncMock(side_effect=Exception("fmp 13F down")))
+    assert agg_fail["completeness"]["institutional"] == "failed"
+
+
+@pytest.mark.asyncio
 async def test_aggregate_verdict_normalizes_in_line_and_unknown():
     """verdict 正規化: _verdict 'in-line' → 'inline'、estimate 欠如 → 'unknown' (生英語を mailer に渡さない)。"""
     from app.main import _aggregate_ticker_data_for_push

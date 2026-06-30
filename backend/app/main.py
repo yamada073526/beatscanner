@@ -24991,6 +24991,10 @@ async def _aggregate_ticker_data_for_push(
     #   空→確定 Q が残る)、summarize で直近確定の保有率 + 前期比を集計。None は mailer 側で省略。
     inst_ownership_pct = inst_ownership_delta_pt = None
     inst_investors_holding = inst_quarter_label = None
+    # 4値 source status (ok|error|timeout|empty)。valuation-extras endpoint L1288-1295 と同一導出。
+    # 完全性台帳 (in-app) と 1:1 にするため completeness dict にも入れる (PR#149 B の続き)。
+    # 例外で導出前に落ちたら "error" 扱い (試みて取れなかった = 取得失敗、_classify_src と一貫)。
+    inst_src_status = "error"
     try:
         from .aggregator.institutional import (
             candidate_quarters as _inst_qs,
@@ -25018,9 +25022,32 @@ async def _aggregate_ticker_data_for_push(
                     inst_quarter_label = f"{_iy}Q{(_im - 1) // 3 + 1}"
                 except ValueError:
                     inst_quarter_label = None
+            inst_src_status = "ok"
+        elif all(isinstance(r, Exception) for r in _inst_raw):
+            inst_src_status = "error"
+        elif all(r is None for r in _inst_raw):
+            inst_src_status = "timeout"
+        else:
+            # fetch は成功したが直近確定 13F なし (ADR / IPO 直後 等) = 該当データなし。
+            inst_src_status = "empty"
     except Exception as e:
         # 取得失敗は機関保有セクション省略で継続 (他メトリクスは送信)。
         print(f"[earnings-push][agg] institutional skip for {ticker}: {e}")
+        inst_src_status = "error"
+
+    # in-app completenessLedger.js classifyInstitutional と同一写像で email completeness に合流:
+    #   ok→ok / error・timeout→failed / empty→na / else→unknown。
+    #   ⚠️ timeout を明示的に failed 扱い (3値マッピング流用だと unknown に落ち「沈黙の欠落」)。
+    #   これで email 完全性台帳と in-app 完全性台帳 (CompletenessRollupBadge) が再び 1:1。
+    completeness["institutional"] = (
+        "ok"
+        if inst_src_status == "ok"
+        else "failed"
+        if inst_src_status in ("error", "timeout")
+        else "na"
+        if inst_src_status == "empty"
+        else "unknown"
+    )
 
     return {
         "verdict": verdict,
