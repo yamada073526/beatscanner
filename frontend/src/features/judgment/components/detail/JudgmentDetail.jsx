@@ -19,6 +19,9 @@ import StockPriceChart from '../../../../components/StockPriceChart.jsx';
 // SPEC 2026-05-28 Sprint 4 + 6 (pillar 2 technical): Chart 直下に hero card 2 つを並列配置
 // v187 (3体合議 ui/金融/qa 全員一致): テクニカル章の横並び売買目安カードを統合する価格 ladder (縦の数直線)。
 import PriceLadder from '../../../../components/PriceLadder.jsx';
+// §③ 章頭の verdict bar (2秒 anchor)。3体合議 + user gate 2026-06-30。cup_handle.state を source に
+//   (PriceLadder と同 source = §③ 内の局面表示が矛盾しない)。静的辞書のみ・zero-fetch。
+import BuyZoneVerdictBar from './sections/BuyZoneVerdictBar.jsx';
 // v127 R16-3 (R12-1 Phase 1 R2): IBD Distribution Day カウンター (機関の売り圧力目安)
 // v126 R8-3 Phase 2: MarketSurge 互換 Cup-Handle pivot narration (state=formation 時のみ表示)
 // v126 R8-3 Phase 3: 直近 breakout = support level narration (last_breakout 取得時のみ表示)
@@ -378,13 +381,21 @@ export default function JudgmentDetail({
   //   technical endpoint は dedupGet coalesce 済 (StateCompass / prefetch / 各 zone card と同一 URL) のため
   //   追加 fetch は発生しない。patterns.rs = { rs_vs_spy_pct, self_percentile, ranking_label, period_months }。
   const [technicalRs, setTechnicalRs] = useState(null);
+  // §③ verdict bar 用の cup_handle.state。同一 fetchTechnical (dedupGet coalesce) から抽出 = 追加 fetch 0。
+  //   PriceLadder の cup = technical?.patterns?.cup_handle と同 source のため §③ 内で局面表示が矛盾しない。
+  const [cupState, setCupState] = useState(null);
   useEffect(() => {
     setTechnicalRs(null); // ticker 切替時に他銘柄の RS 残骸を出さない
+    setCupState(null);
     if (!selectedTicker) return undefined;
     let cancelled = false;
     fetchTechnical(selectedTicker, TECHNICAL_CANONICAL_PATTERNS)
-      .then((t) => { if (!cancelled) setTechnicalRs(t?.patterns?.rs || null); })
-      .catch(() => { if (!cancelled) setTechnicalRs(null); });
+      .then((t) => {
+        if (cancelled) return;
+        setTechnicalRs(t?.patterns?.rs || null);
+        setCupState(t?.patterns?.cup_handle?.state || null);
+      })
+      .catch(() => { if (!cancelled) { setTechnicalRs(null); setCupState(null); } });
     return () => { cancelled = true; };
   }, [selectedTicker]);
 
@@ -794,6 +805,12 @@ export default function JudgmentDetail({
                 </div>
                 {/* task4: 章の内容を共通カード枠で囲う */}
                 <div style={CHAPTER_FRAME}>
+                {/* verdict bar (2秒 anchor): 章頭・チャート前。mockup v6 .vbar 準拠。
+                    cup_handle.state→tone 静的辞書 (buyZoneVerdict.js)。price/changePct=detail 由来。
+                    §38: confirm に色を付けない (色は過熱 amber の警告のみ)・Row2 に動的数値なし。 */}
+                {selectedTicker && (
+                  <BuyZoneVerdictBar state={cupState} price={detail?.price} changePct={detail?.changePct} />
+                )}
                 {/* 同定リボン: mockup 非対応 + L0 同定層と情報重複のため撤去
                     (2026-06-28 mockup 忠実化・user gate)。 */}
                 {/* チャート + PriceLadder = v5 の 1 ユニット構造を継承（mockup L4: 価格ラダー → 期間別リターン 順）*/}
