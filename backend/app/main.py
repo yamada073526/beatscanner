@@ -22939,6 +22939,58 @@ async def cron_earnings_annual_scan(
     }
 
 
+@app.post("/api/cron/canslim-warmup")
+async def cron_canslim_warmup(
+    body: dict | None = None,
+    x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
+):
+    """chunk loop の前に universe cache を prime する軽量 endpoint (SPEC 2026-07-01 chunk-0 fix)。
+
+    真因: canslim / cup / earnings-annual の chunk 0 (offset=0) が _fetch_market_cap_top_n の
+    cache miss (FMP company-screener fetch + _fetch_sp500_top_n anchor union) を per-ticker 処理と
+    同じ Railway ~5min gateway 窓で背負い 502 → mega-cap (market-cap top250) の全カラムが nightly で
+    欠落していた (offset>=250 は同一 process で cache hit のため完走していた)。
+
+    本 endpoint は per-ticker 処理を一切持たず universe fetch だけを実行して
+    _BACKTEST_UNIVERSE_CACHE (24h TTL、cache_key=mktcap_top{n}、offset 非依存) を温める。
+    後続 chunk loop は全 chunk が cache hit になり chunk 0 の固有負荷が消える。
+
+    SPEC §6 不変条件: per-ticker upsert / null_reasons / cfps 純関数 /
+    _fetch_market_cap_top_n の universe 順序・anchor union には一切触れない (既存 loader を呼ぶだけ)。
+
+    GHA からは chunk loop の直前に nightly 本体と同一 BODY (universe_size 一致) で連続 curl すること
+    (in-memory cache 共有が前提。間に長い別 step を挟まない)。万一 warmup が 502 しても後続 chunk 0 が
+    従来通り cache miss を吸収するだけで退行しない (graceful)。elapsed_sec で warmup 単独 wall-time を
+    可視化し「warmup も 502 し得る」リスクを定量監視する (6 体 review SRE/QA verdict)。
+    """
+    _check_cron_secret(x_cron_secret)
+    body = body or {}
+    universe_source = body.get("universe_source", "russell3000")
+    universe_size_arg = body.get("universe_size")
+    _t0 = _time.time()
+    if universe_source == "russell3000":
+        # default は cron_canslim_scan の russell3000 default (1000) と揃える。GHA nightly は
+        # universe_size を明示する ($BODY=3000) ため body 値が使われるが、手動 curl で body 省略時の
+        # cache_key (mktcap_top{n}) 食い違いを防ぐ (6 体 ship 前 gate backend/FMP verdict)。
+        n = int(universe_size_arg) if universe_size_arg else 1000
+        tickers = await _fetch_market_cap_top_n(n)
+    else:
+        n = int(universe_size_arg) if universe_size_arg else 500
+        tickers = await _fetch_sp500_top_n(n)
+    elapsed = round(_time.time() - _t0, 2)
+    print(
+        f"[canslim-warmup] primed universe_source={universe_source} n={n} "
+        f"count={len(tickers)} elapsed={elapsed}s head={tickers[:5]}"
+    )
+    return {
+        "ok": True,
+        "universe_source": universe_source,
+        "primed_count": len(tickers),
+        "elapsed_sec": elapsed,
+        "head": tickers[:5],
+    }
+
+
 @app.post("/api/cron/canslim-scan")
 async def cron_canslim_scan(
     body: dict | None = None,
