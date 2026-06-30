@@ -62,7 +62,7 @@ GUIDANCE_EXTRACT_TOOL_SCHEMA: dict = {
                     "basis": {
                         "type": ["string", "null"],
                         "enum": ["gaap", "non_gaap", None],
-                        "description": "EPS 基準。 text 中に non-GAAP/adjusted 明示なら non_gaap、 GAAP 明示なら gaap、 不明なら null。",
+                        "description": "EPS 基準。 text 中に non-GAAP/adjusted 明示なら non_gaap、 GAAP 明示なら gaap、 不明なら null。 GAAP と non-GAAP 両方記載時は non_gaap を優先 (consensus は non-GAAP 基準)。",
                     },
                     "consensus_diff_pct": {
                         "type": ["number", "null"],
@@ -101,7 +101,7 @@ GUIDANCE_EXTRACT_TOOL_SCHEMA: dict = {
                     "basis": {
                         "type": ["string", "null"],
                         "enum": ["gaap", "non_gaap", None],
-                        "description": "EPS 基準。 non-GAAP/adjusted 明示なら non_gaap、 GAAP 明示なら gaap、 不明なら null。",
+                        "description": "EPS 基準。 non-GAAP/adjusted 明示なら non_gaap、 GAAP 明示なら gaap、 不明なら null。 GAAP と non-GAAP 両方記載時は non_gaap を優先 (consensus は non-GAAP 基準)。",
                     },
                     "consensus_diff_pct": {"type": ["number", "null"]},
                 },
@@ -241,6 +241,11 @@ _SYSTEM_STATIC = """あなたは米国株企業の SEC 8-K プレスリリース
    - **純利益 ÷ 株数 で EPS を算出してはいけない** (§38 LLM 計算禁止)。 EPS の数値が明示された時のみ。
    - **basis 判定**: text 中に「non-GAAP」 「adjusted」 明示なら basis="non_gaap"、 「GAAP」 明示なら "gaap"、
      不明なら null。 SaaS / テックは non-GAAP EPS guidance が主流。
+   - **GAAP・non-GAAP の EPS が両方記載されている場合は non-GAAP のレンジを優先抽出** (basis="non_gaap")。
+     q_eps / fy_eps は 1 つの値しか持てず (OpEx のように 2 item へ分けられない)、 アナリスト consensus は
+     non-GAAP (adjusted) 基準のため、 GAAP を選ぶと基準不一致で後段の照合が不能になる。 数値の選択であって
+     計算ではない (明示レンジをそのまま raw 抽出)。
+     例:「GAAP EPS of $3.40 to $3.90 and non-GAAP EPS of $4.25 to $4.75」 → low=4.25, high=4.75, basis="non_gaap"。
    - 単一値 (例「EPS $1.16」) は low=high=1.16。 想定株数 (例「257M shares」) は EPS でないので q_eps に入れない。
 6. **consensus 比較**: text 中に「consensus 比 +X%」 等の明示があれば raw で抽出、
    LLM が計算した数値は **禁止**。
