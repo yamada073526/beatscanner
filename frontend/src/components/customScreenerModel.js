@@ -365,6 +365,9 @@ export const PRESET_CONDS = [
   { key: 'eps_3y_rising',    kind: 'flag',   flag: 'eps3RisingOnly',   pass: (item) => item.eps_3y_rising  === true },
   { key: 'rev_3y_rising',    kind: 'flag',   flag: 'rev3RisingOnly',   pass: (item) => item.rev_3y_rising  === true },
   { key: 'cfps_3y_rising',   kind: 'flag',   flag: 'cfpsRisingOnly',   pass: (item) => item.cfps_3y_rising === true },
+  // 条件5 CFPS>EPS (cfps_eps_ratio): 直近年 CFPS/EPS 比 > 1.0 で達成。numeric のため != null && > 1.0 で判定。
+  //   null (sector guard 金融/REIT・外貨ADR・EPS≤0 clamp・データ欠落) = AND 除外 (honest)。backend PR#141 配線済。
+  { key: 'cfps_eps_ratio',   kind: 'flag',   flag: 'cfpsEpsRatioOnly', pass: (item) => item.cfps_eps_ratio != null && item.cfps_eps_ratio > 1.0 },
   // beat/cfps Phase 2 (Sprint 3): 直近決算ビート (new_high_break の gate「必須」)。=== true で None/false 除外。
   { key: 'latest_beat',      kind: 'flag',   flag: 'beatOnly',         pass: (item) => item.latest_beat === true },
   // cup: Cup-with-Handle 形成 (Premium 限定・backend が free/pro は cup_state=null マスク)。
@@ -438,6 +441,8 @@ export const CROW_BINARY_META = {
   eps_3y_rising:    { label: 'EPS 連続増',       th: null, freshness: 'eps_3y_rising',  tooltip: '1 株利益 (EPS) が直近 3 期連続で増加した銘柄。' },
   rev_3y_rising:    { label: '売上 連続増',      th: null, freshness: 'rev_3y_rising',  tooltip: '売上高が直近 3 期連続で増加した銘柄。' },
   cfps_3y_rising:   { label: 'CFPS 連続増(4期)', th: null, freshness: 'cfps_3y_rising', tooltip: '1 株あたり営業キャッシュフロー (CFPS) が直近 4 期連続で増加した銘柄。' },
+  // 条件5 CFPS>EPS (cfps_eps_ratio): locked なし=free・th: null=段階表現なし・numeric ratio bool トグル。
+  cfps_eps_ratio:   { label: 'CFPS>EPS', th: null, freshness: 'cfps_eps_ratio', tooltip: '1株あたり営業CF (CFPS) が1株利益 (EPS) を上回る銘柄。利益にキャッシュの裏付けがある目安。銀行・REIT・赤字企業等は対象外。' },
   // beat/cfps Phase 2 (Sprint 3): 直近決算ビート (gate・locked なし=free)。None 注記 tooltip。
   latest_beat:      { label: '直近決算ビート', th: null, freshness: 'latest_beat', tooltip: '直近の決算で 1 株利益 (EPS) が市場予想を上回った銘柄。直近決算の EPS 予想が非公表の銘柄は対象外となります。' },
   // S3: セクター別リーダーの定義条件 is_sector_rs_leader を可視化 (preset名と表示の乖離=Trust Cliff 解消)。
@@ -447,7 +452,7 @@ export const CROW_BINARY_META = {
 export const CROW_LAYOUT = [
   // eps_yoy_mid / roe_lenient は market_leading 専用 (renderCrow が market_leading 限定で描画・他 preset 非露出)。
   //   ≥型 eps_yoy_pct / null除外 roe と field 共有・別 key (件数 SSOT 無影響)。RENDERABLE 要件で本 layout に登録。
-  { group: '品質',       sub: '利益・キャッシュの質', keys: ['funda_pass', 'ocf_margin_pct', 'ocf_gt_netincome', 'eps_yoy_pct', 'eps_yoy_mid', 'eps_cagr_3y', 'roe', 'roe_lenient'] },
+  { group: '品質',       sub: '利益・キャッシュの質', keys: ['funda_pass', 'ocf_margin_pct', 'ocf_gt_netincome', 'cfps_eps_ratio', 'eps_yoy_pct', 'eps_yoy_mid', 'eps_cagr_3y', 'roe', 'roe_lenient'] },
   // beat/cfps Phase 2: 決算の継続性 trio を grade 条件と視覚分離 (精度スライダー非連動の binary トグル)。
   { group: '品質',       sub: '決算の継続性（連続増）', keys: ['eps_3y_rising', 'rev_3y_rising', 'cfps_3y_rising'] },
   // beat/cfps Phase 2 (Sprint 3): 直近決算ビート。new_high_break で gate「必須」描画 (PRESET_GATE_CONDS)。
@@ -486,7 +491,7 @@ export const PRESET_DISPLAY_CONDS = {
   //   ※適用条件バー (screener-applied-bar L1935) には「決算5条件達成」チップで表示・除去可能 = 厳密な
   //     隠れフィルタ (Trust Cliff) ではないが、invariant 案A「適用条件は crow パネルにも全て出す」保守的
   //     方針に合わせ①にも可視化 (件数不変・3 体 review 全員 keep 推奨。2026-06-26)。
-  earnings_pass:  ['funda_pass', 'eps_yoy_pct', 'eps_cagr_3y', 'ocf_margin_pct', 'ocf_gt_netincome', 'roe', 'rs_percentile', 'eps_3y_rising', 'rev_3y_rising', 'cfps_3y_rising'],
+  earnings_pass:  ['funda_pass', 'eps_yoy_pct', 'eps_cagr_3y', 'ocf_margin_pct', 'ocf_gt_netincome', 'cfps_eps_ratio', 'roe', 'rs_percentile', 'eps_3y_rising', 'rev_3y_rising', 'cfps_3y_rising'],
   // 新高値ブレイク: 型/タイミング (買い場圏/52週高値) + 需給 (出来高急増) + RS + EPS YoY 床。
   //   eps_yoy_pct は P0 修正で述語に算入する床条件 (≥0%) のため必ず可視化 (隠れフィルタ禁止・Trust Cliff)。
   new_high_break: ['latest_beat', 'new_high_signal', 'cup', 'volume_surge_pct', 'rs_percentile', 'eps_yoy_pct'],
