@@ -871,7 +871,7 @@ export default function JudgmentDetail({
                     最上部から移設。gate (!detail?.error) は旧位置と同条件で維持 = 「取得」 と
                     「分析取得失敗」 を同一画面で矛盾させない。badge 内部で empty/loading/errored/main を自己解決。 */}
                 {selectedTicker && !detail?.error && (
-                  <CompletenessRollupBadge ticker={selectedTicker} />
+                  <CompletenessRollupBadge ticker={selectedTicker} valuationExtras={valuationExtras} />
                 )}
                 </div>
               </section>

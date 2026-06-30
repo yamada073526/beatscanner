@@ -91,9 +91,31 @@ export function classifyMarket(spyUnavailable) {
   };
 }
 
+// valuation-extras の sources.institutional (13F 機関保有・O'Neil "I") を機関保有クラスタに分類。
+// raw: 'ok'→ok / 'error'・'timeout'→failed / 'empty'→na (該当データなし=13F 非対象・ADR 等で正常) /
+//   それ以外 (null/undefined=未 fetch/旧 schema)→unknown。
+// ⚠️ 'timeout' を明示的に failed 扱いする (sources.institutional は backend で 4 値 ok|empty|error|timeout、
+//   main.py L1288-1295)。classifyEarnings の 3 値マッピングを流用すると 'timeout' が unknown に落ち、
+//   buildPresent から除外されて「沈黙の欠落」 になる = 本クラスタ固有の blocker。
+export function classifyInstitutional(sourceStatus) {
+  let status;
+  if (sourceStatus === 'ok') status = 'ok';
+  else if (sourceStatus === 'error' || sourceStatus === 'timeout') status = 'failed';
+  else if (sourceStatus === 'empty') status = 'na';
+  else status = 'unknown';
+  return {
+    key: 'institutional',
+    name: '機関保有',
+    status,
+    failLabel: '機関保有データ未取得',
+    rows: [{ key: 'institutional', label: '機関投資家の保有（13F）', status }],
+  };
+}
+
 // 取得状況が判明したクラスタ (unknown は除外)。ok / failed / na を含む = ドリルダウン対象。
-export function buildPresent(earnings, market) {
-  return [earnings, market].filter((c) => c.status !== 'unknown');
+// institutional は後付け配線のため optional (未渡し=undefined は filter で除外、後方互換)。
+export function buildPresent(earnings, market, institutional) {
+  return [earnings, market, institutional].filter((c) => c && c.status !== 'unknown');
 }
 
 // ロールアップ文言を組む (B-1/B-2/B-3): 名前ベースで「取得 / 未取得 / 該当なし」 を列挙。
