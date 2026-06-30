@@ -88,6 +88,12 @@
             "command": "bash .claude/hooks/post_write_handover_carryforward.sh",
             "timeout": 10,
             "statusMessage": "handover 引き継ぎ漏れチェック中..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/post_write_handover_autopush.sh",
+            "timeout": 30,
+            "statusMessage": "handover を remote 同期中..."
           }
         ]
       }
