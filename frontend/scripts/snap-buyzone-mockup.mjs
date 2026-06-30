@@ -7,10 +7,11 @@ import { mkdirSync } from 'node:fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '../../');
-const mockup = resolve(repoRoot, 'docs/specs/mockups/pane3-technical-buyzone-v1.html');
+const ver = process.argv[2] || 'v2';
+const mockup = resolve(repoRoot, `docs/specs/mockups/pane3-technical-buyzone-${ver}.html`);
 const outDir = resolve(__dirname, '../.visual');
 mkdirSync(outDir, { recursive: true });
-const out = resolve(outDir, 'buyzone-mockup-v1.png');
+const out = resolve(outDir, `buyzone-mockup-${ver}.png`);
 
 const killer = setTimeout(() => { console.error('TIMEOUT'); process.exit(2); }, 55000);
 
