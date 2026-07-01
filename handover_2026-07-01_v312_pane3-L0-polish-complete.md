@@ -40,6 +40,14 @@ L0 の一連の見た目調整 + 捏造防止ガードを着地。**全て main 
 - **branch = `claude/pane3-phase-c-handover-lf2tfc`**。PR merged 後は origin/main から作り直し (`git checkout -B ... origin/main`)、follow-up は force-with-lease push (merged 履歴のみのため安全)。
 - **Hallucination Guard 4層** (LLM endpoint) / **mockup 作業は必ず mockup-fidelity skill の claim grounding ゲート**を通す。
 
+## 🔀 別 lineage の未確認項目 (本 pane3 handover の対象外・要別途確認)
+
+本 handover は pane3 lineage (v311→v312)。**並行して走った screener lineage (`handover_2026-07-01_v307_screener.md`) に以下の open 項目がある**ため、carryforward hook が検出。pane3 作業とは別 work stream で本 handover では扱わないが、silently drop を避けるため cross-reference として明記 (状態は screener 側で要確認・一部は #145/#147 で既に main 反映済の可能性):
+- **Stop hook を main にマージ（push 自動完走の有効化）** — #145 で反映済の可能性
+- **SPEC Phase 4 を main に反映** — #147 で反映済の可能性
+- **#4 flip monitoring** — screener 固有・要確認
+- **#5 ファイル整理** — screener 固有・要確認
+
 ## 📁 主要 file (次セッションの起点)
 
 - `frontend/src/features/judgment/components/detail/Hero.jsx` — L0 識別バンド (row2 / 株価列 / countdownPill / sectorPill)
