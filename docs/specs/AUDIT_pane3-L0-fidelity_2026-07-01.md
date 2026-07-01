@@ -86,7 +86,7 @@ mockup-fidelity 三分類の「意図不明は accidental と決め打ちせず 
 
 ## grounding 検証ログ (mockup-fidelity Phase 0 gate)
 
-`verify-claims.sh` で監査台帳 C10 #3-8 の主張を ground-truth 照合 (`scripts/example-claims.tsv` が再現 fixture)。
+`verify-claims.sh` (mockup-fidelity claim grounding ゲート・**別 PR** `claude/mockup-fidelity-grounding-guard`) で監査台帳 C10 #3-8 の主張を ground-truth 照合 (同 PR の `scripts/example-claims.tsv` が再現 fixture)。
 
 ```
 PASS=1  FAIL=5  WARN=0  → exit 1
