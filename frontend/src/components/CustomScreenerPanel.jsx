@@ -690,8 +690,14 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     //   quiet_quality 以外 (custom mode = activePreset null 含む) では描かない。custom mode で
     //   ≥型 (出来高急増 / 機関保有増) と ≤型が同 group に並ぶ矛盾露出を構造的に防ぐ (Trust Cliff)。
     //   quiet_quality のときは下の汎用 grade crow (gradeAnnot が ≤ 閾値を描画) へ素通し。
-    if (cond.key === 'volume_quiet' || cond.key === 'inst_qoq_calm' || cond.key === 'uptrend') {
+    if (cond.key === 'volume_quiet' || cond.key === 'inst_qoq_calm') {
       if (activePreset !== 'quiet_quality') return null;
+    }
+    // ── 上昇トレンドフィルタ (A軸) facet ガード (SPEC_2026-07-02 screener-uptrend-filter) ──
+    //   quiet_quality (RS高止まり) と market_leading (rs_mid_band/vs_spy のトレーリング指標) の
+    //   両方で「落ちるナイフ」混入リスクが同型のため、この 2 preset でのみ描画する (他 preset 非露出)。
+    if (cond.key === 'uptrend') {
+      if (activePreset !== 'quiet_quality' && activePreset !== 'market_leading') return null;
     }
     // ── 「市場をリードし始めた銘柄」専用 facet ガード (SPEC_2026-06-28 market_leading) ──
     //   vs_spy / rs_mid_band / roe_lenient / eps_yoy_mid は CROW_LAYOUT 登録済 (RENDERABLE 要件) だが、

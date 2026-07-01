@@ -158,11 +158,17 @@ export const EPS_YOY_MID_FACET = {
 // ─── 上昇トレンドフィルタ (A軸 = 下降トレンド除外) facet (SPEC_2026-07-02 screener-uptrend-filter) ──
 // 「静かな強さ」(quiet_quality) の落ちるナイフ/下降トレンド汚染 (PBR 等) を除外する opt-in override。
 //   真因 = RS 高止まり。PBR は反落中でも RS=80 で quiet_quality を通過 → post-spike falling knife が化ける。
+// 2026-07-02 追記: 「市場をリードし始めた銘柄」(market_leading) にも同型リスクを確認 (user 指摘)。
+//   rs_mid_band (RS中位帯 45-75) + vs_spy (直近6ヶ月の対SPY超過) はいずれもトレーリング (過去参照) 指標
+//   のため、数ヶ月前に急騰しその後下降トレンドに転じた銘柄でも 6ヶ月窓の超過リターンはプラスのまま残り
+//   通過し得る (quiet_quality の RS 高止まりと同じ穴)。pv50/sl50 は preset 非依存 (銘柄自身の直近 50日線
+//   位置/傾きのみ) のため、同じ facet 定義を market_leading にも opt-in override として再利用する。
 // signal: pv50 (価格の50DMA乖離%) + sl50 (50DMAの傾き%・21営業日)。compound facet:
 //   pv50 の下限閾値 (grades) を base に、厳/最厳は sl50 gate を custom pass で AND する。
 // ★ FUNDA_FACETS には入れない (activeFacets grade 行への誤露出回避・NEW_HIGH_SIGNAL_FACET と同型)。
-//   ★ PRESET_PREDICATES.quiet_quality.grades にも入れない = default OFF (cold-start 安全・ゼロ回帰)。
-//     user がスイッチ ON で override 経由算入。renderCrow guard で quiet_quality 限定描画。
+//   ★ PRESET_PREDICATES.quiet_quality / market_leading の grades にも入れない = default OFF
+//     (cold-start 安全・ゼロ回帰)。user がスイッチ ON で override 経由算入。renderCrow guard で
+//     quiet_quality / market_leading の 2 preset のみ描画 (他 preset には非露出)。
 // grades = pv50 下限%。annotMap = 段毎の honest ラベル (厳/最厳の pv50 閾値は同値 ≥0 のため sl50 gate の
 //   差を明示して mseg 重複表示を回避・gradeAnnot 経由)。§38: pv50/sl50 は「50日線との位置・傾き」の
 //   観測事実。色 polarity なし・将来断定なし。null (nightly scan 前/履歴不足) = AND 除外 (honest)。
@@ -555,7 +561,9 @@ export const PRESET_DISPLAY_CONDS = {
   quiet_quality:  ['rs_percentile', 'uptrend', 'volume_quiet', 'inst_qoq_calm', 'ocf_margin_pct', 'roe'],
   // 市場をリードし始めた銘柄 (SPEC_2026-06-28 market_leading): 述語適用6条件と 1:1 (隠れフィルタなし invariant)。
   //   rs_mid_band(範囲 gate 相当・必須) + vs_spy + ocf_margin_pct + roe_lenient + eps_yoy_mid (grades) + latest_beat (beatOnly gate)。
-  market_leading: ['rs_mid_band', 'vs_spy', 'ocf_margin_pct', 'roe_lenient', 'eps_yoy_mid', 'latest_beat'],
+  //   uptrend (上昇トレンドフィルタ A軸・2026-07-02 追記): quiet_quality と同じ opt-in override を再利用
+  //     (rs_mid_band/vs_spy がトレーリング指標のため落ちるナイフを見落とす同型リスク・user 指摘)。
+  market_leading: ['rs_mid_band', 'vs_spy', 'ocf_margin_pct', 'roe_lenient', 'eps_yoy_mid', 'latest_beat', 'uptrend'],
 };
 
 // ─── D-8 sort (SPEC_2026-06-25): 結果リストのユーザー制御 sort ──────────────────────
