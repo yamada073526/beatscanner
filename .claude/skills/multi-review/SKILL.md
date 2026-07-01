@@ -95,7 +95,7 @@ CLAUDE.md「multi-review 6 体 vs 3 体の判断基準」 参照。 要約:
 - 最後に **「賛成 / 条件付賛成 / 反対」 の総合判定**
 ```
 
-**model 配分**: CLAUDE.md「コスト効率運用」 参照。 6 体合議では 2-3 体を Opus (金融 / Anthropic / マーケ 等 priority 高 reviewer)、 残り 3-4 体を Sonnet で cost 30-50% 圧縮。 3 体合議は全て Sonnet で十分。
+**model 配分**: CLAUDE.md「コスト効率運用」→「model 自動化」層2 が SSOT。 **user 明示起動の重量級 review は Opus 4.8 中心**へ引き上げ (`model: "opus"` — user が review を能動選択した = Opus cost 許容の合図)。 一方 **自動 loop 内部から呼ばれる軽量 review** (PGE `evaluator` L4 等) は cost 優先で 6 体中 2-3 体だけ Opus 4.8 (金融 / Anthropic / マーケ 等 priority 高 reviewer) + 残り Sonnet 5、 3 体合議は全て Sonnet 5 で十分。
 
 ### Step 3: 結果統合
 

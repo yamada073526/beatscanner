@@ -208,7 +208,9 @@ LLM (Claude API) を呼ぶ endpoint は **4 層防御** を必ず通すこと。
 
 handover v94 で「過去 30 日 $407 消費、 大半は dev session の Opus 4.7 sub-agent」 と真因確定。 以下ルールで速度を維持しつつ cost 50%+ 削減:
 
-1. **main session**: **Opus 4.8 (1M context) + effort `high` 既定** 維持 — 複雑 reasoning / multi-step debugging で速度確保。 effort は `high` をベースラインとし、 **常時 `max`/`xhigh` は非推奨** (過剰思考 + token 跳ねで月コスト目標に逆行)。 `xhigh`/`max` は重要設計 Phase gate / 難 root-cause debug の **タスク単位の一時引き上げ** に限定 (現セッションのみ)。 単純作業 (typo / doc 編集 / 文言調整) は sub-agent (Sonnet) 委譲 or effort `medium`。 ※ Opus 4.8 の `high` は 4.7 の既定 `xhigh` より 1 段下 = 同作業で token 効率が良く、 4.8 化自体が cost 削減に寄与
+1. **main session**: **Sonnet 5 (`claude-sonnet-5`) + effort `high` 既定** (2026-07-01 user 決定で Opus 4.8 default から変更)。 Sonnet 5 は coding / agentic で Opus 級に迫る品質を **Opus 比 40% 安** (導入価格 〜2026-08-31 は **60% 安 = $2/$10 per 1M**) で出す。 Opus 4.8 と**同一 tokenizer** なので token 数はほぼ同じ = 価格差がそのまま cost 差。 effort は `high` ベースライン、 **常時 `max`/`xhigh` は非推奨**。 単純作業 (typo / doc / 文言) は effort `medium` or sub-agent。
+   - ⚠️ **"ultrathink" は effort であって model ではない**: Sonnet 5 で ultrathink → **Sonnet 5 @ max effort** (model は Opus 4.8 に上がらない — main の model は `/model` = user 手動切替のみで、 CLAUDE.md も Claude も session 中に自分の model を変えられない)。 Opus の推論天井が要る難所は下記「model 自動化」層4 の通知制で手動切替。
+   - ⚠️ **主判断は main loop で走る (sub-agent でない)**: design 美意識 gate / Trust Cliff 判断 / Hallucination Guard 4 層設計 は main。 Sonnet 5 default では ここも Sonnet 5 で走るため、 Claude は該当 gate 着手前に「Opus 4.8 推奨、 `/model opus` で切替を」 と proactive 通知する。
 
    > **effort 自動化 3 層 (v174 確立)** — 「常時 max」 でなく「必要な時だけ上げる」 を自動化:
    > 1. **日常デフォルト = `high`** (上記 baseline、 手動変更不要)
@@ -219,11 +221,19 @@ handover v94 で「過去 30 日 $407 消費、 大半は dev session の Opus 4
    >    - **大規模 refactor の設計判断**: migration / framework 移行など blast radius が大きい変更
    > ※ skill 自動化 (層2) と通知 (層3) で「上げ忘れ」 と「上げっぱなしコスト」 の両方を防ぐ。 詳細 memory: [[feedback_cost_efficient_operation]]
 
-2. **sub-agent default**: **Sonnet 4.6/4.7** — Agent tool 呼出時に必ず `model: "sonnet"` を指定。 single-shot review / file ops / grep 主体の sub-agent は Sonnet で十分 (Opus 90-95% の精度、 5x 安い)
-3. **例外で Opus sub-agent**: 以下のみ Opus 指定
-   - `planner` subagent (SPEC 起票、 multi-step 推論主体)
-   - 6 体合議の **2-3 体だけ** (金融 verdict / Anthropic engineer / マーケター 等、 法務 / cost 設計の精度が高 priority な reviewer)
-4. **6 体合議 mixed model**: 残り 3-4 体 (ui-designer / frontend-architect / qa-dogfooder) は Sonnet で並列起動
+   > **model 自動化 — Opus 4.8 escalation (2026-07-01 user 決定)** — 「main は安い Sonnet 5、 内部処理 (sub-agent) だけ必要時 Opus に上げる」。 上の effort 自動化とは**別軸**で併存 (effort = 思考深度 / model = 使うモデル):
+   > 1. **日常デフォルト = Sonnet 5** (main + 大半 sub-agent、 手動変更不要)
+   > 2. **user 明示の sub-agent review = 自動 Opus 4.8** — user が「サブエージェントレビュー」「マルチレビュー」を能動起動した時、 `multi-review` の reviewer を Opus 4.8 中心に引き上げる (重量級 review の能動選択 = Opus cost を許容した合図)。 sub-agent は「内部処理」ゆえ Claude が `model: "opus"` を決定論的に指定でき **完全自動**。 model 配分は本節が SSOT (`multi-review/SKILL.md:98` が参照)。
+   > 3. **research fan-out = verify/synthesis 段のみ Opus 4.8** — `/deep-research` や Claude 起動の調査 agent で、 探索・fetch 段は Sonnet 5、 **adversarial verify + synthesis 段は Opus 4.8** を指定 (質が効く段だけ課金)。
+   > 4. **ultrathink / main 主判断 = model は自動で上がらない (通知制)** — ultrathink は effort であり escalation 対象の sub-agent を持たない (Sonnet 5 @ max で走る)。 Opus 天井が要る難所は Claude が着手前に「Opus 4.8 推奨、 `/model opus` で (作業後 `/model sonnet` で戻す)」 と proactive 通知 → user 手動切替。
+   > ※ 2 系統を混同しない: **内部処理 (sub-agent)** = Claude が model 指定でき自動化可 / **main loop 自身 (ultrathink 含む)** = `/model` = user 手動切替のみ。
+
+2. **sub-agent default**: **Sonnet 5 (`claude-sonnet-5`)** — Agent tool 呼出時 `model: "sonnet"` 指定で解決 (旧 4.6/4.7 から昇格。 標準同価格で品質向上、 導入価格中は割安)。 single-shot review / file ops / grep 主体は Sonnet 5 で十分
+3. **例外で Opus 4.8 sub-agent** (`model: "opus"` 指定):
+   - `planner` subagent (SPEC 起票、 multi-step 推論主体。 `.claude/agents/planner.md` frontmatter `model: opus` 済)
+   - user 明示起動の `multi-review` reviewer (上記「model 自動化」層2)
+   - research の verify / synthesis 段 (層3)
+4. **review の model 配分**: user 明示起動の重量級 review = Opus 4.8 中心 (層2)。 自動 loop 内部の軽量 review (PGE `evaluator` L4 が内部呼ぶ 3 体等) は cost 優先で Sonnet 5 可。 6 体 vs 3 体の起動判断は別途「multi-review 6 体 vs 3 体」節参照
 5. **handover lazy read**: session 開始時に handover full-read 禁止、 `fetch-handover` skill (圧縮 30 行 summary) のみ。 full-read は user 明示要請時のみ
 6. **memory lazy load**: MEMORY.md index 行だけ読み、 anchor 本体は必要時のみ Read (現状 proactive full-read を避ける)
 7. **billing alert**: Anthropic console で日次 $5 / 月 $50 / 月 $200 email alert 3 段設定済 (v94 セッションで user 設定済、 spike 24h 内検知)
