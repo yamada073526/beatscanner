@@ -69,6 +69,19 @@
 
 ## 5. スプリント分割 (上限 6 / 本 SPEC は 4 sprint)
 
+> **✅ S1 完了 (2026-07-02・PR #173・本番 merge・deploy 済)**。稼働検証の結果、`guidance_verdict.available: true` が
+> 0 件 (guidance_snapshots の filed_at 欠落 + consensus 蓄積不足のため — S1 実装のバグではなく前向き専用ゆえの honest な
+> 現状) と判明。**S2-S4 は「データ蓄積が始まる頃」まで DEFER** と user 合意 (2026-07-02)。
+>
+> **DEFER 理由**: S2-S4 も filed_at 修正も前向きにしか値が積まれない。`available:true` が出るのは次決算
+> (NVDA なら 2026-08 頃) 以降、全期揃うのは約 8Q (≒2年)。今実装しても当面は全部 2 点 fallback 表示 (= 現状と同じ)
+> で塩漬けになる。S1 で fiscal_date 規約差 (calendar 誤認) を一度誤ったため、実データが揃ってから「その時の正確な
+> 実データ形状」で実装する方が安全 (想定と実データのズレを避ける)。
+>
+> **再開トリガー**: 保有/WL 銘柄の `guidance_verdict.available: true` が複数期で観測できるようになった時点で
+> S2 (`_is_good_quarter` 3点目結線) から再開する。S1 の `guidance_verdict` フィールドは無害な前向き土台として
+> 本番に残置済み (frontend 未使用)。
+
 > **重要な設計上の発見 (Planner 裏取り済み)**: 3点目の PIT 突き合わせは **新規開発ではない**。既存の純粋関数 `classify_pit_consensus` が既に「発表時点コンセンサス比サプライズ判定」を per-Q で行い、L1SummaryBuckets の forward block では `guidance_pit_consensus` として **既に本番稼働している** (`main.py:18707` の select + `:18736` の `blk["guidance_pit_consensus"]`)。本 Sprint 4c の本質は「この既存 PIT 判定を quarterly-history endpoint の**各四半期 history 行**に per-Q で結線し、`_is_good_quarter` の3点目に流す」という**結線タスク**。ゆえに sprint 数を 4 に抑えられる。
 >
 > **同一ファイルを複数 sprint で触る**: `backend/app/main.py` は S1・S2 で、`EarningsThreePoint.jsx` は S3 のみ。**S1 → S2 は同一ファイル (main.py) を連続で触るため、S1 完了時に必ず commit してから S2 に着手する** (sprint 間 commit 必須・pge-loop-debugger の「sprint 累積なし」落とし穴防止)。
