@@ -192,6 +192,11 @@ export default function Hero({
       // §38: 決算までの日数は時間事実であり買い推奨でない。amber = 投資業界の「警告/注目」色 (CLAUDE.md)。
       <span style={heroFactChipCountdown}>次決算まで {nextEarningsDays} 日</span>
     ) : null;
+  // 2026-07-01 user 確定: セクター pill を row2 の「次決算まで」隣に配置。sector 源は JudgmentDetail で
+  //   profile-extended.sector を優先 (technicalRs.sector は universe-cache 依存で欠落しがち)。§38 事実指標・neutral 色。
+  const sectorPill = sectorJp ? (
+    <span style={heroFactChipStyle} data-testid="pane3-hero-sector">{sectorJp}</span>
+  ) : null;
   // v160 D2 Sprint 2 → SPEC 2026-06-04 B: ウォッチ★ボタン。 onAddToWatchlist 未配線時は非表示。
   //   compact = pill ★ (未追加=outline / 追加済=fill・cyan brand・:active へこみ + 登録 burst)。
   //   非 compact = 旧 Chip「ウォッチ追加 / 追加済」。
@@ -332,33 +337,22 @@ export default function Hero({
               {[companyName, period].filter(Boolean).join(' · ')}
             </div>
           )}
-          {/* id-meta: セクター pill のみ (C10 #4: 次決算カウントダウンは row2 へ移設・正本 mockup §L0 準拠)。 */}
-          {sectorJp && (
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: 'var(--space-2, 8px)',
-                marginTop: 'var(--space-2, 8px)',
-                alignItems: 'center',
-              }}
-            >
-              {/* セクター pill: neutral (§38 事実指標・緑/accent 不使用)。和訳済 (SECTOR_JP)。 */}
-              <span style={heroFactChipStyle} data-testid="pane3-hero-sector">{sectorJp}</span>
-            </div>
-          )}
+          {/* id-meta: セクター/次決算カウントダウンは row2 へ移設 (2026-07-01 user)。テキストは ticker + 社名·FY のみ。 */}
           </div>{/* end: テキスト情報 div */}
         </div>{/* end: ロゴ + テキスト flex div */}
         {/* Sprint 3: EarningsRing が wrapper(ring + 下ラベル) を返すため flex-start に変更
             v115 fix: Number.isFinite() gate を除去、 EarningsRing 内部で 'unknown' state を扱う
             (data 未取得時に「取得待ち」 fallback 表示で「壊れて見える」 bug 対策) */}
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'flex-start', gap: 'var(--space-3, 12px)' }}>
-          {/* v6 L0 mockup id-price: 株価列 (右寄せ・価格 / 前日比 / 1W·1M)。価格は「同定」= verdict 扱いを外す。*/}
-          {Number.isFinite(priceNum) && (
+          {/* v6 L0 mockup id-price: 株価列 (右寄せ・価格 / 前日比 / 1W·1M·3M / 最終更新 / ウォッチ)。価格は「同定」= verdict 扱いを外す。
+              2026-07-01 user: ウォッチ追加ボタンを期間別リターン(+最終更新)の直下=株価列末尾へ移設。 */}
+          {(Number.isFinite(priceNum) || watchButton) && (
             <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-end' }}>
-              <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)', lineHeight: 1.1 }}>
-                ${priceNum.toFixed(2)}
-              </div>
+              {Number.isFinite(priceNum) && (
+                <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)', lineHeight: 1.1 }}>
+                  ${priceNum.toFixed(2)}
+                </div>
+              )}
               {Number.isFinite(changeNum) && (
                 <div style={{ fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: retColor(changeNum) }}>
                   {changeNum > 0 ? '+' : ''}{(changeNum * 100).toFixed(2)}%
@@ -381,6 +375,10 @@ export default function Hero({
                 <div data-testid="pane3-hero-updated" style={{ fontSize: 10.5, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
                   最終更新 {lastUpdatedLabel}
                 </div>
+              )}
+              {/* 2026-07-01 user 確定: ウォッチ追加ボタンを期間別リターン(+最終更新)の下=株価列末尾に配置。 */}
+              {watchButton && (
+                <div style={{ marginTop: 'var(--space-2, 8px)' }}>{watchButton}</div>
               )}
             </div>
           )}
@@ -408,11 +406,12 @@ export default function Hero({
           )}
           </div>{/* end: 株価列 + ring + verdict クラスタ */}
         </div>{/* end: id-row */}
-        {/* C10 #4 row2 (正本 mockup §L0 .row2): 次決算カウントダウン pill + ウォッチ追加ボタンを id-row の下に集約。 */}
-        {(countdownPill || watchButton) && (
+        {/* row2 (2026-07-01 user 確定レイアウト): 次決算カウントダウン pill + セクター pill。
+            ウォッチ追加ボタンは株価列 (期間別リターンの下) へ移設済。 */}
+        {(countdownPill || sectorPill) && (
           <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-2, 8px)' }}>
             {countdownPill}
-            {watchButton}
+            {sectorPill}
           </div>
         )}
       </div>
