@@ -121,6 +121,9 @@ export default function Hero({
   const { data: periodReturns } = usePeriodReturns(ticker);
   const ret1W = periodReturns?.periods?.['1W']?.return_pct;
   const ret1M = periodReturns?.periods?.['1M']?.return_pct;
+  // C7 (Phase C Sprint 1・決定A): L0 mini を 1W/1M → 1W/1M/3M に拡張。データは usePeriodReturns で
+  //   既取得 (8期間) ゆえ perf 無影響。§38 safe (過去確定リターン)。§③ 8期間フルグリッドは折りたたみ維持。
+  const ret3M = periodReturns?.periods?.['3M']?.return_pct;
   // v6 L0 mockup id-row セクター pill: 英語 raw → 和訳 (exact-match、未知は raw fallback)。null なら非表示。
   const sectorJp = sectorLabelJp(sector);
   const priceNum = price != null ? Number(price) : NaN;
@@ -269,11 +272,16 @@ export default function Hero({
                   {changeNum > 0 ? '+' : ''}{(changeNum * 100).toFixed(2)}%
                 </div>
               )}
-              {(Number.isFinite(ret1W) || Number.isFinite(ret1M)) && (
-                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
-                  {Number.isFinite(ret1W) && (<>1W <span style={{ color: retColor(ret1W) }}>{fmtRet(ret1W)}</span></>)}
-                  {Number.isFinite(ret1W) && Number.isFinite(ret1M) && ' · '}
-                  {Number.isFinite(ret1M) && (<>1M <span style={{ color: retColor(ret1M) }}>{fmtRet(ret1M)}</span></>)}
+              {(Number.isFinite(ret1W) || Number.isFinite(ret1M) || Number.isFinite(ret3M)) && (
+                <div data-testid="pane3-hero-returns" style={{ fontSize: 11.5, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+                  {[['1W', ret1W], ['1M', ret1M], ['3M', ret3M]]
+                    .filter(([, r]) => Number.isFinite(r))
+                    .map(([lab, r], i) => (
+                      <span key={lab}>
+                        {i > 0 && ' · '}
+                        {lab} <span style={{ color: retColor(r) }}>{fmtRet(r)}</span>
+                      </span>
+                    ))}
                 </div>
               )}
             </div>
