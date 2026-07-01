@@ -9927,6 +9927,11 @@ button.ds-chip.hero-watch-add:hover svg {
 .verdict-hero {
   border-radius: var(--radius-lg, 16px);
   border: 1.5px solid transparent;
+  /* Sprint S2 (C1、2026-07-01 user 承認 gold 復活): 他 17 panel と同じ J1 gold top hairline
+     (line ~9845 .bs-panel と同一 token/opacity) を longhand で追加。verdict-hero は panel-card/
+     bs-panel/surface-card と入れ子にしない設計 (v58→v59 教訓) のため class 追加でなく、
+     この専用 selector にのみ同一 CSS を複製する (glow host 二重化を避ける)。 */
+  border-top: 2px solid color-mix(in srgb, var(--color-gold) 35%, var(--border));
   transition:
     box-shadow var(--motion-slow, 360ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
     border-color var(--motion-slow, 360ms) ease,
@@ -9937,6 +9942,10 @@ button.ds-chip.hero-watch-add:hover svg {
   isolation: isolate;
   will-change: transform, box-shadow;
   /* contain: paint 絶対禁止 — glow が clip される v54 root cause */
+}
+[data-theme="dark"] .verdict-hero {
+  /* Sprint S2 (C1): dark も .bs-panel と同じ 30% opacity で揃える (line ~9849 と同一値) */
+  border-top-color: color-mix(in srgb, var(--color-gold) 30%, var(--border));
 }
 
 /* arrival (スクロール中央帯でのみ点灯 / useArrivalSpotlight 一元) */
@@ -10055,7 +10064,16 @@ button.ds-chip.hero-watch-add:hover svg {
   transform: translateZ(0);
   box-shadow: none !important;
   border-color: transparent !important;
+  /* Sprint S2 (C1): .bs-panel.is-glow-calm (line ~10040) と同じ longhand 保護。border-color の
+     transparent 一括指定で top の gold hairline も消えてしまう (= それ自体が hover 変化) ため、
+     steady rest の gold を border-top-color で個別に復元し hover=rest を厳密一致させる。 */
+  border-top-color: color-mix(in srgb, var(--color-gold) 35%, var(--border)) !important;
   background-color: transparent !important;
+}
+[data-theme="dark"] .ds-judgment-detail .verdict-hero.is-glow-calm.is-arriving,
+[data-theme="dark"] .ds-judgment-detail .verdict-hero.is-glow-calm.is-arriving:hover,
+[data-theme="dark"] .ds-judgment-detail .verdict-hero.is-glow-calm:hover {
+  border-top-color: color-mix(in srgb, var(--color-gold) 30%, var(--border)) !important;
 }
 
 /* ── 2026-06-29 Sprint 2: 判定サマリー bucket/mini の clickable affordance (控えめ hover) ──
