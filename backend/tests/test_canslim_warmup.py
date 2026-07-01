@@ -61,6 +61,37 @@ def test_warmup_primes_russell_universe():
     mock_fetch.assert_awaited_once_with(3000)
 
 
+def test_warmup_russell_default_is_3000_when_size_omitted():
+    """universe_size 省略時の russell3000 default = RUSSELL3000_DEFAULT_N (=3000、 production と統一)。
+
+    handover v309 Task1: russell3000 default 1000→3000 統一。 production nightly は BODY で 3000 を
+    明示するが、 body 省略の手動 curl が production と同 cache_key (mktcap_top3000) になることを保証する
+    (1000 のままだと canslim-warmup が prime した cache を後続 chunk が活かせず chunk-0 502 を再現しうる)。
+    全 5 russell3000 cron (canslim-scan / canslim-warmup / cup-scan / rs-scan / earnings-annual-scan) が
+    同一定数 RUSSELL3000_DEFAULT_N を参照するため、 本 warmup 経路の resolution で代表検証する。
+    """
+    from app.main import RUSSELL3000_DEFAULT_N
+
+    assert RUSSELL3000_DEFAULT_N == 3000
+    fake_universe = ["AAPL", "MSFT", "NVDA"]
+    with (
+        patch.dict(os.environ, {"CRON_SECRET": "test-secret"}),
+        patch(
+            "app.main._fetch_market_cap_top_n",
+            new_callable=AsyncMock,
+            return_value=fake_universe,
+        ) as mock_fetch,
+    ):
+        resp = client.post(
+            "/api/cron/canslim-warmup",
+            headers={"X-Cron-Secret": "test-secret"},
+            json={"universe_source": "russell3000"},  # universe_size を省略 → default が使われる
+        )
+    assert resp.status_code == 200
+    # universe_size 省略 → default 3000 で fetch (1000 でない)。 cache_key を production と一致させる。
+    mock_fetch.assert_awaited_once_with(RUSSELL3000_DEFAULT_N)
+
+
 def test_warmup_primes_sp500_source():
     """sp500 source では _fetch_sp500_top_n(500) を呼ぶ (default n=500)。"""
     fake_sp = ["AAPL", "MSFT", "NVDA"]
