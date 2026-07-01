@@ -28,6 +28,10 @@
 import { useEffect, useState, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchQuarterlyHistory } from '../../../../../api.js';
+// v313 Sprint S4 follow-up (user dogfood): 「良い決算N連続」は EPS 単独の成長トレンド chip と
+// 同じ緑 chip 形状だと直下の EPS bar (緑) と視覚的にグルーピングされ「EPS だけの話」に誤読されるため、
+// mockup pane3-full-v4.html §継続性 の .pillbox 意匠 (dot+太字値+gold「KB核心」タグ) に統一する。
+import { Pillbox } from './L3QualityFold.jsx';
 
 const TESTID = 'earnings-growth-spark';
 
@@ -516,15 +520,19 @@ export default function EarningsGrowthSpark({ ticker }) {
       {(showStreak || showAccel) && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
           {showStreak && (
-            <SummaryChip
-              testid="good-quarter-streak-chip"
-              color="var(--color-gain)"
-              ariaLabel={`良い決算 ${beatStreak} 期連続`}
+            <span
+              data-testid="good-quarter-streak-chip"
+              aria-label={`良い決算 ${beatStreak} 期連続`}
               title={`EPS と売上がともに市場予想を上回った決算が直近 ${beatStreak} 四半期連続`}
             >
-              <span aria-hidden style={{ fontSize: 9, opacity: 0.85 }}>●</span>
-              <span>良い決算 {beatStreak}Q 連続</span>
-            </SummaryChip>
+              <Pillbox
+                label="良い決算 連続"
+                value={`${beatStreak}期`}
+                tag="KB核心"
+                tagTone="gold"
+                dotTone="gain"
+              />
+            </span>
           )}
           {showAccel && (
             <SummaryChip

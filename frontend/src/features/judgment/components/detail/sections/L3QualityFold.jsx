@@ -214,7 +214,8 @@ const citeStyle = { fontSize: 11, color: 'var(--text-muted)' };
 const dashStyle = { color: 'var(--text-muted)', fontWeight: 400 };
 
 // chip / dot の tone → semantic token (raw hex なし)。bg は color-mix で theme 連動。
-const TONE_COLOR = {
+// v313 Sprint S4 追記: EarningsGrowthSpark.jsx でも同一 pillbox 意匠 (mockup .pillbox) を再利用するため export。
+export const TONE_COLOR = {
   gain: 'var(--color-gain)',
   loss: 'var(--color-loss)',
   warning: 'var(--color-warning)',
@@ -243,7 +244,8 @@ function MiniChip({ tone = 'muted', children }) {
 }
 
 // mockup .strip .pillbox 準拠 (継続性 capstone)。dot + label + 太字値 + 任意 tag。
-function Pillbox({ label, value, tag, tagTone = 'muted', dotTone = 'gain' }) {
+// v313 Sprint S4 追記: EarningsGrowthSpark.jsx の「良い決算N連続」でも同一意匠を再利用するため export。
+export function Pillbox({ label, value, tag, tagTone = 'muted', dotTone = 'gain' }) {
   return (
     <span
       style={{
