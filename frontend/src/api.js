@@ -400,6 +400,26 @@ export async function fetchNews(ticker, limit = 10) {
   }
 }
 
+// v313 Sprint S3 (C2): 8Q fold の collapsed summary (JudgmentDetail) と EarningsReactionPanel 展開時の
+// fetch を dedupGet で coalesce (非LLM・純 Python 算出、 feedback_llm_calc_separation.md)。
+export async function fetchEarningsReaction(ticker) {
+  try {
+    return await dedupGet(`/api/earnings-reaction/${encodeURIComponent(ticker)}`, { headers: fmpHeaders() });
+  } catch {
+    return null;
+  }
+}
+
+// v313 Sprint S3 (C2): Insider fold の collapsed summary (JudgmentDetail) と InsiderPanel 展開時の
+// fetch を dedupGet で coalesce (非LLM、 FMP form4/13F そのまま)。
+export async function fetchInsider(ticker) {
+  try {
+    return await dedupGet(`/api/insider/${encodeURIComponent(ticker)}`, { headers: fmpHeaders() });
+  } catch {
+    return null;
+  }
+}
+
 // v41 Phase 3: マクロ・地政学的なマーケット全体ニュース (Today's Brief)
 // /api/news/{ticker} との衝突を避けて /api/macro-news を使用
 export async function fetchMacroNews() {

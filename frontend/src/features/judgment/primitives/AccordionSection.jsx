@@ -11,7 +11,7 @@
  *     { type: 'spring', stiffness: 220, damping: 28 }
  *   PGE 落とし穴 4: infinite animation 禁止 → open/close で完結 → OK
  */
-import React, { useState, useCallback, useContext, useEffect, useId, useRef } from 'react';
+import { useState, useCallback, useContext, useEffect, useId } from 'react';
 import { m, AnimatePresence, useReducedMotion } from 'framer-motion';
 import styles from './AccordionSection.module.css';
 import { useWorkspaceStore } from '../../../state/workspaceStore.js';
@@ -100,6 +100,9 @@ export default function AccordionSection({
   // v6 Sprint 2-C (L3 fold): 折りたたみ時も右側に常時表示する 1 行サマリー (mockup の f-sum)。
   //   ReactNode 可。LLM narration 禁止 (静的 label / 数値のみ)。label と併用可 (summary→label の順)。
   summary = null,
+  // v313 Sprint S3 (C2 Pro tag): summary 直後に mockup `.pro-tag` 相当のバッジを表示。
+  //   呼び出し側で「fold が Pro/Premium gate 対象 かつ 現在プラン未解放」の時のみ true を渡す。
+  proTag = false,
   streaming = false,
   defaultOpen = false,
   controlledOpen,
@@ -159,12 +162,7 @@ export default function AccordionSection({
   // isAnimating=true 中は overflow:hidden → framer-motion の height 0↔auto animate が clip を担保
   // isAnimating=false かつ isOpen の場合のみ overflow:visible → tier-m-glow halo が AccordionSection 境界で clip されない
   // glow_elevation_postmortem.md §v54: contain: paint 絶対禁止維持
-  const [isAnimating, setIsAnimating] = useState(false);
-  // useRef は useId の前後どこでも OK だが宣言をここに集約
-  const _animateRef = useRef(null); // 将来の cleanup 用予約 (現在は onAnimationStart/Complete で直接 state set)
-
-  // View Transitions API サポート検出
-  const supportsVT = typeof document !== 'undefined' && 'startViewTransition' in document;
+  const [_isAnimating, setIsAnimating] = useState(false);
 
   // 開閉トグル
   // v99 dogfood feedback F (3 巡目): 2 巡目で「open のみ VT、 close は framer-motion 単独」 にしたが
@@ -275,6 +273,7 @@ export default function AccordionSection({
               {summary}
             </span>
           )}
+          {proTag && <span className={styles.proTag}>Pro</span>}
           {streaming && (
             <span className={styles.streamingIndicator} aria-live="polite">
               生成中...

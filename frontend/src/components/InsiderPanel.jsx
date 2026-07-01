@@ -10,6 +10,7 @@
  *   - 表示は静的、 LLM narration なし
  */
 import { useEffect, useState } from 'react';
+import { fetchInsider } from '../api.js';
 
 const fmtShares = (n) => {
   if (!Number.isFinite(n) || n === 0) return '—';
@@ -98,10 +99,9 @@ export default function InsiderPanel({ ticker, l3Headings = false }) {
     setLoading(true);
     setError(null);
     setData(null);
-    fetch(`/api/insider/${encodeURIComponent(ticker)}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d) => { if (!cancelled) setData(d); })
-      .catch((e) => { if (!cancelled) setError(e.message); })
+    // v313 Sprint S3: dedupGet 経由 (JudgmentDetail の collapsed summary fetch と coalesce)
+    fetchInsider(ticker)
+      .then((d) => { if (!cancelled) { if (d) setData(d); else setError('取得できませんでした'); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [ticker]);
