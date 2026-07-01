@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Card from '../../primitives/Card.jsx';
 import { Star } from 'lucide-react';
 
@@ -58,6 +58,22 @@ const sectorLabelJp = (raw) => {
   return SECTOR_JP[k] || k; // 未知 sector は raw 英語をそのまま (捏造でなく事実)
 };
 
+// C10 #8 (CLAUDE.md「動的データには最終更新X分前を併記」): epoch(秒/ms 自動判定) → 相対時刻。
+// TtmValuationPanel._relativeTime と同ロジック。§38 safe (時間事実であり買い推奨でない)。
+// 実 timestamp が無い/不正な時は null → 表示側で非表示 (「本日」等の freshness を捏造しない = Trust Cliff 回避)。
+function heroRelativeTime(fetchedAt) {
+  if (!Number.isFinite(fetchedAt) || fetchedAt <= 0) return null;
+  const ms = fetchedAt < 1e12 ? fetchedAt * 1000 : fetchedAt;
+  const diffMin = Math.floor((Date.now() - ms) / 60000);
+  if (diffMin < 0) return null; // 未来 timestamp は表示しない (データ異常)
+  if (diffMin < 1) return 'たった今';
+  if (diffMin < 60) return `${diffMin} 分前`;
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) return `${diffHour} 時間前`;
+  const diffDay = Math.floor(diffHour / 24);
+  return `${diffDay} 日前`;
+}
+
 /**
  * Hero section. design_system.md §B-2 Display tier 28-32px, fw600, -0.02em, lh1.1.
  * Verdict chip = beat/miss/in-line/unknown (§1-A).
@@ -115,12 +131,18 @@ export default function Hero({
   //   未配線 (legacy path) では onAddToWatchlist=undefined で button 自体を非表示 = 安全。
   watchlist,
   onAddToWatchlist,
+  // C10 #8: この銘柄の detail bundle を client が組み立てた epoch (detail.lastAnalyzedAt)。
+  //   価格を含む detail 一式の「最終更新」時刻。未取得(0)/未配線(undefined) は非表示。
+  lastUpdatedAt,
 }) {
   const inWatchlist = Array.isArray(watchlist) && !!ticker && watchlist.includes(ticker);
   // v6 L0 mockup id-price: 1W/1M リターン (usePeriodReturns・ReturnGrid と同 endpoint・return_pct は % 単位)。
   const { data: periodReturns } = usePeriodReturns(ticker);
   const ret1W = periodReturns?.periods?.['1W']?.return_pct;
   const ret1M = periodReturns?.periods?.['1M']?.return_pct;
+  // C7 (Phase C Sprint 1・決定A): L0 mini を 1W/1M → 1W/1M/3M に拡張。データは usePeriodReturns で
+  //   既取得 (8期間) ゆえ perf 無影響。§38 safe (過去確定リターン)。§③ 8期間フルグリッドは折りたたみ維持。
+  const ret3M = periodReturns?.periods?.['3M']?.return_pct;
   // v6 L0 mockup id-row セクター pill: 英語 raw → 和訳 (exact-match、未知は raw fallback)。null なら非表示。
   const sectorJp = sectorLabelJp(sector);
   const priceNum = price != null ? Number(price) : NaN;
@@ -153,6 +175,80 @@ export default function Hero({
       ? '決算発表前のため判定保留中'
       : undefined;
 
+  // C10 #8: 1 分毎 re-render で「最終更新 X分前」を live 更新 (CLAUDE.md「動いている感」)。
+  //   timestamp 無し時は interval を張らない (無駄 render 回避)。
+  const [, setUpdatedTick] = useState(0);
+  useEffect(() => {
+    if (!Number.isFinite(lastUpdatedAt) || lastUpdatedAt <= 0) return undefined;
+    const id = setInterval(() => setUpdatedTick((n) => n + 1), 60000);
+    return () => clearInterval(id);
+  }, [lastUpdatedAt]);
+  const lastUpdatedLabel = heroRelativeTime(lastUpdatedAt);
+
+  // C10 #4 (正本 mockup pane3-full-v5 §L0 .row2): 次決算カウントダウン pill + ウォッチ追加ボタンを
+  //   id-row の「下」(row2) に集約。従来 countdown=id-meta / watch=右上クラスタ だったが mockup 構造へ合わせる。
+  const countdownPill =
+    Number.isFinite(nextEarningsDays) && nextEarningsDays > 0 && !hideCountdownChip ? (
+      // §38: 決算までの日数は時間事実であり買い推奨でない。amber = 投資業界の「警告/注目」色 (CLAUDE.md)。
+      <span style={heroFactChipCountdown}>次決算まで {nextEarningsDays} 日</span>
+    ) : null;
+  // v160 D2 Sprint 2 → SPEC 2026-06-04 B: ウォッチ★ボタン。 onAddToWatchlist 未配線時は非表示。
+  //   compact = pill ★ (未追加=outline / 追加済=fill・cyan brand・:active へこみ + 登録 burst)。
+  //   非 compact = 旧 Chip「ウォッチ追加 / 追加済」。
+  const watchButton =
+    onAddToWatchlist && ticker ? (
+      compactWatchlist ? (
+        <button
+          type="button"
+          className={`hero-watch-star${inWatchlist ? ' is-active' : ''}${watchBurst ? ' is-bursting' : ''}`}
+          data-testid={inWatchlist ? 'hero-watchlist-added' : 'hero-watchlist-add'}
+          title={inWatchlist ? 'クリックでウォッチリストから解除' : `${ticker} をウォッチリストに追加`}
+          aria-label={inWatchlist ? `${ticker} をウォッチリストから解除` : `${ticker} をウォッチリストに追加`}
+          aria-pressed={inWatchlist}
+          onClick={handleWatchClick}
+        >
+          <Star size={16} strokeWidth={2} aria-hidden className="hero-watch-star__icon" />
+          {watchBurst && (
+            <span className="watch-burst" aria-hidden="true">
+              {WATCH_BURST_DIRS.map(([bx, by], i) => (
+                <span
+                  key={i}
+                  className="watch-burst__p"
+                  style={{ '--bx': `${bx}px`, '--by': `${by}px` }}
+                />
+              ))}
+            </span>
+          )}
+        </button>
+      ) : inWatchlist ? (
+        <Chip
+          size="md"
+          variant="display"
+          tone="muted"
+          title="クリックでウォッチリストから解除"
+          ariaLabel={`${ticker} をウォッチリストから解除`}
+          onClick={() => onAddToWatchlist(ticker)}
+          data-testid="hero-watchlist-added"
+          icon={<Star size={13} strokeWidth={2} aria-hidden style={{ color: 'var(--color-gold)', fill: 'var(--color-gold)', marginRight: 4, verticalAlign: '-1px' }} />}
+        >
+          追加済
+        </Chip>
+      ) : (
+        <Chip
+          size="md"
+          variant="add"
+          tone="accent"
+          className="hero-watch-add"
+          onClick={() => onAddToWatchlist(ticker)}
+          ariaLabel={`${ticker} をウォッチリストに追加`}
+          data-testid="hero-watchlist-add"
+          icon={<Star size={13} strokeWidth={2} aria-hidden style={{ marginRight: 4, verticalAlign: '-1px' }} />}
+        >
+          ウォッチ追加
+        </Chip>
+      )
+    ) : null;
+
   // Phase 3 #6 View Transition: Pane 3 で 1 個のみ (重複なし)。
   // ticker 切替時に logo + ticker + 企業名 + verdict chip が cross-fade morph。
   // Card は ...rest を受け取るため style で直接付与可能。
@@ -160,17 +256,23 @@ export default function Hero({
     <Card data-testid="pane3-hero" frameless={frameless} style={{ viewTransitionName: 'ticker-hero' }}>
       <div
         style={{
-          // v86 R5 C: Aman / Ritz 入場感のため padding を --space-6 (24px) → --space-8 (32px) に
-          // 一段「ロビー」 感が出る breathing room (token は 4/8/12/16/24/32/48 のみ、 7 は無し)。
-          // Vision aman 70 → 75+ 狙い、 既存 token を使用 (design system 整合)。
+          // v86 R5 C: Aman / Ritz 入場感のため padding --space-8 (32px)。C10 #4 row2 追加により column wrapper 化。
           padding: 'var(--space-8, 32px)',
           display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-          gap: 'var(--space-8, 32px)',
-          flexWrap: 'wrap',
+          flexDirection: 'column',
+          gap: 'var(--space-3, 12px)',
         }}
       >
+        {/* id-row: 左=ロゴ/ticker/社名/sector・右=株価列 (正本 mockup §L0 の同定行) */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 'var(--space-8, 32px)',
+            flexWrap: 'wrap',
+          }}
+        >
         {/* ticker 左側: ロゴ + テキスト情報 */}
         {/* 視覚 fidelity (2026-06-28): 正本 mockup .id-row は align-items:center (logo を name ブロック中央へ)。
             旧 flex-start + marginTop:9 hack は ticker 40px 前提だったので撤去 (ticker 26px 化に伴い不要)。 */}
@@ -230,9 +332,8 @@ export default function Hero({
               {[companyName, period].filter(Boolean).join(' · ')}
             </div>
           )}
-          {/* 視覚 fidelity (2026-06-28): mockup id-meta は pill 2個のみ = [次決算カウントダウン(amber)・セクター]。
-              FY は会社名行へ移動・「次回日付」pill は撤去 (mockup に無い・カウントダウンと冗長)。順序も mockup 準拠。 */}
-          {(sectorJp || (Number.isFinite(nextEarningsDays) && nextEarningsDays > 0 && !hideCountdownChip)) && (
+          {/* id-meta: セクター pill のみ (C10 #4: 次決算カウントダウンは row2 へ移設・正本 mockup §L0 準拠)。 */}
+          {sectorJp && (
             <div
               style={{
                 display: 'flex',
@@ -242,14 +343,8 @@ export default function Hero({
                 alignItems: 'center',
               }}
             >
-              {/* 次決算カウントダウン (amber pill・mockup「次決算まで N 日」)。§38: 時間事実で買い推奨でない。 */}
-              {Number.isFinite(nextEarningsDays) && nextEarningsDays > 0 && !hideCountdownChip && (
-                <span style={heroFactChipCountdown}>次決算まで {nextEarningsDays} 日</span>
-              )}
               {/* セクター pill: neutral (§38 事実指標・緑/accent 不使用)。和訳済 (SECTOR_JP)。 */}
-              {sectorJp && (
-                <span style={heroFactChipStyle} data-testid="pane3-hero-sector">{sectorJp}</span>
-              )}
+              <span style={heroFactChipStyle} data-testid="pane3-hero-sector">{sectorJp}</span>
             </div>
           )}
           </div>{/* end: テキスト情報 div */}
@@ -269,11 +364,22 @@ export default function Hero({
                   {changeNum > 0 ? '+' : ''}{(changeNum * 100).toFixed(2)}%
                 </div>
               )}
-              {(Number.isFinite(ret1W) || Number.isFinite(ret1M)) && (
-                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
-                  {Number.isFinite(ret1W) && (<>1W <span style={{ color: retColor(ret1W) }}>{fmtRet(ret1W)}</span></>)}
-                  {Number.isFinite(ret1W) && Number.isFinite(ret1M) && ' · '}
-                  {Number.isFinite(ret1M) && (<>1M <span style={{ color: retColor(ret1M) }}>{fmtRet(ret1M)}</span></>)}
+              {(Number.isFinite(ret1W) || Number.isFinite(ret1M) || Number.isFinite(ret3M)) && (
+                <div data-testid="pane3-hero-returns" style={{ fontSize: 11.5, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+                  {[['1W', ret1W], ['1M', ret1M], ['3M', ret3M]]
+                    .filter(([, r]) => Number.isFinite(r))
+                    .map(([lab, r], i) => (
+                      <span key={lab}>
+                        {i > 0 && ' · '}
+                        {lab} <span style={{ color: retColor(r) }}>{fmtRet(r)}</span>
+                      </span>
+                    ))}
+                </div>
+              )}
+              {/* C10 #8: 最終更新「X分前」(実 timestamp 有時のみ・§38 は時間事実で買い推奨でない)。 */}
+              {lastUpdatedLabel && (
+                <div data-testid="pane3-hero-updated" style={{ fontSize: 10.5, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+                  最終更新 {lastUpdatedLabel}
                 </div>
               )}
             </div>
@@ -300,67 +406,15 @@ export default function Hero({
               {verdictLabel}
             </Chip>
           )}
-          {/* v160 D2 Sprint 2 → SPEC 2026-06-04 B: ウォッチ★ボタン。 onAddToWatchlist 未配線時は非表示。
-              2026-06-14 user feedback (compass header = compactWatchlist):
-                - 登録前後でアイコン配置が変わり隣の EarningsRing がズレる → 両状態とも同サイズの pill ★ に統一。
-                - 枠付き「横長◯」 (pill) + 色を gold → cyan (brand) に変更。未追加=outline / 追加済=fill。
-                - :active へこみ演出 (.hero-watch-star CSS) + 登録時 burst (★のかけら飛散)。
-              非 compact モード (旧 Chip「ウォッチ追加 / 追加済」) は従来どおり維持。 */}
-          {onAddToWatchlist && ticker && (
-            compactWatchlist ? (
-              <button
-                type="button"
-                className={`hero-watch-star${inWatchlist ? ' is-active' : ''}${watchBurst ? ' is-bursting' : ''}`}
-                data-testid={inWatchlist ? 'hero-watchlist-added' : 'hero-watchlist-add'}
-                title={inWatchlist ? 'クリックでウォッチリストから解除' : `${ticker} をウォッチリストに追加`}
-                aria-label={inWatchlist ? `${ticker} をウォッチリストから解除` : `${ticker} をウォッチリストに追加`}
-                aria-pressed={inWatchlist}
-                onClick={handleWatchClick}
-              >
-                <Star size={16} strokeWidth={2} aria-hidden className="hero-watch-star__icon" />
-                {watchBurst && (
-                  <span className="watch-burst" aria-hidden="true">
-                    {WATCH_BURST_DIRS.map(([bx, by], i) => (
-                      <span
-                        key={i}
-                        className="watch-burst__p"
-                        style={{ '--bx': `${bx}px`, '--by': `${by}px` }}
-                      />
-                    ))}
-                  </span>
-                )}
-              </button>
-            ) : (
-              inWatchlist ? (
-                <Chip
-                  size="md"
-                  variant="display"
-                  tone="muted"
-                  title="クリックでウォッチリストから解除"
-                  ariaLabel={`${ticker} をウォッチリストから解除`}
-                  onClick={() => onAddToWatchlist(ticker)}
-                  data-testid="hero-watchlist-added"
-                  icon={<Star size={13} strokeWidth={2} aria-hidden style={{ color: 'var(--color-gold)', fill: 'var(--color-gold)', marginRight: 4, verticalAlign: '-1px' }} />}
-                >
-                  追加済
-                </Chip>
-              ) : (
-                <Chip
-                  size="md"
-                  variant="add"
-                  tone="accent"
-                  className="hero-watch-add"
-                  onClick={() => onAddToWatchlist(ticker)}
-                  ariaLabel={`${ticker} をウォッチリストに追加`}
-                  data-testid="hero-watchlist-add"
-                  icon={<Star size={13} strokeWidth={2} aria-hidden style={{ marginRight: 4, verticalAlign: '-1px' }} />}
-                >
-                  ウォッチ追加
-                </Chip>
-              )
-            )
-          )}
-        </div>
+          </div>{/* end: 株価列 + ring + verdict クラスタ */}
+        </div>{/* end: id-row */}
+        {/* C10 #4 row2 (正本 mockup §L0 .row2): 次決算カウントダウン pill + ウォッチ追加ボタンを id-row の下に集約。 */}
+        {(countdownPill || watchButton) && (
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-2, 8px)' }}>
+            {countdownPill}
+            {watchButton}
+          </div>
+        )}
       </div>
     </Card>
   );

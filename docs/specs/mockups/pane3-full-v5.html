@@ -492,13 +492,15 @@
           <span class="val">$212.19<span class="dist">+10.2%</span></span></div>
 
         <div class="lv now" style="top:208px;"><span class="dot"></span><span class="tick" style="background:var(--accent);"></span>
-          <span class="lab">現在価格</span>
+          <span class="lab">現在価格<span class="sub">ブレイク確認まで 🔒 Premium</span></span>
           <span class="val">$192.53</span>
           <span class="spark"><i style="height:40%"></i><i style="height:65%"></i><i style="height:45%"></i><i style="height:80%"></i><i style="height:55%"></i><i style="height:70%"></i></span></div>
 
-        <div class="lv dn locked" style="top:250px;"><span class="tick"></span>
-          <span class="lab">リスク確認 −8%</span>
-          <span class="val">• • •<span class="lock">🔒</span></span></div>
+        <!-- 2026-07-01 §38 更新: 「リスク確認 −8%（損切りライン）」行は【ブレイク未確認では非表示】。
+             現在値基準の −8% を監視段階で見せると「下落余地=買い場」誤読 + 価格逆算 (金商法§38) を招くため、
+             breakout 確認状態 (breakout_support/extended) でのみ提示する累進開示 (実装 PriceLadder.jsx:292)。
+             旧 mockup は常時ロック表示だったが、実装の §38 保守仕様に mockup 側を合わせた (AUDIT_pane3-L0-fidelity_2026-07-01)。
+             ブレイク確認後は現在価格行 sub が「損切り目安 買値 −8%」(amber) に変わる。 -->
         <div class="lv dn locked" style="top:272px;"><span class="tick"></span>
           <span class="lab">支持線目安<span class="sub">box support</span></span>
           <span class="val">• • •<span class="lock">🔒</span></span></div>
@@ -508,7 +510,7 @@
       </div>
       <div class="pl-teaser">
         <span class="lk">🔒</span>
-        <span class="tx"><b>買い目安 Pivot・支持線・リスク確認 −8%</b> は Premium で開放。取っ手付きカップの買い点と損切り基準を数値で。</span>
+        <span class="tx"><b>買い目安 Pivot・支持線</b> は Premium で開放。取っ手付きカップの買い点と底値帯を数値で。</span>
         <span class="cta">Premium を見る</span>
       </div>
     </div>
