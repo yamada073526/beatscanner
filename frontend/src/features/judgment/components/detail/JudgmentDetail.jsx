@@ -53,8 +53,12 @@ import { DetailInstanceTickerContext } from '../../primitives/DetailInstanceTick
 // v108 議題 5A (multi-review 5/5 verdict「release 前 mandatory」):
 // Forward P/E / PEG / 配当性向 / Buyback比率 を KpiStrip に追加するための fetcher。
 // 金商法 §38 / 景表法 §5 配慮で narration / 警告 chip なし、 数値のみ。
-import { fetchValuationExtras, fetchTechnical, TECHNICAL_CANONICAL_PATTERNS, fetchProfileExtended } from '../../../../api.js';
+import { fetchValuationExtras, fetchTechnical, TECHNICAL_CANONICAL_PATTERNS, fetchProfileExtended, fetchEarningsReaction, fetchInsider } from '../../../../api.js';
 import { classifyBuyZone } from '../../../../lib/buyZoneLabels.js';
+// v313 Sprint S3 (C2 Pro tag): 8Q fold の Pro tag 表示要否判定 (現在プランで earnings_8q が未解放か)
+import { canUse } from '../../../../lib/planGating.js';
+// v313 Sprint S3 (C2): 8Q / Insider fold の collapsed summary 純関数 (node env で単体テスト可能にするため分離)
+import { formatEarningsReactionSummary, formatInsiderSummary } from './foldSummaries.js';
 // Phase G Phase 3 (handover v99 §0-D): ChapterSection — 章 2-5 用 generic 章扉 (Noto Serif JP / gold hairline)。
 // headerOnly mode で content 再配置せず brand 一貫性 ([[feedback-gold-accent-continuity]]) を実現。
 // v118 ETF MVP: ETF 入力時は 5 条件適用外 → EtfOverviewPanel を render (Trust Cliff 防止)。
@@ -375,6 +379,39 @@ export default function JudgmentDetail({
         if (!cancelled) setValuationExtras(null);
       }
     })();
+    return () => { cancelled = true; };
+  }, [selectedTicker]);
+
+  // v313 Sprint S3 (C2): 過去8Q決算反応 fold の collapsed summary 用データ。fold 折りたたみ時は
+  // AccordionSection children が unmount される (feedback_accordion_collapsed_unmount.md) ため、
+  // 親 (本 component) が非LLM source を prefetch する。dedupGet 経由で fold 展開時の
+  // EarningsReactionPanel fetch と URL 一致 coalesce (追加 fetch 実質 0)。
+  const [earningsReactionSummary, setEarningsReactionSummary] = useState(null);
+  useEffect(() => {
+    if (!selectedTicker) {
+      setEarningsReactionSummary(null);
+      return undefined;
+    }
+    let cancelled = false;
+    fetchEarningsReaction(selectedTicker).then((d) => {
+      if (cancelled) return;
+      setEarningsReactionSummary(d?.summary || null);
+    });
+    return () => { cancelled = true; };
+  }, [selectedTicker]);
+
+  // v313 Sprint S3 (C2): Insider 取引 fold の collapsed summary 用データ (同上の理由で親が prefetch)。
+  const [insiderFormsForSummary, setInsiderFormsForSummary] = useState(null);
+  useEffect(() => {
+    if (!selectedTicker) {
+      setInsiderFormsForSummary(null);
+      return undefined;
+    }
+    let cancelled = false;
+    fetchInsider(selectedTicker).then((d) => {
+      if (cancelled) return;
+      setInsiderFormsForSummary(Array.isArray(d?.form4) ? d.form4 : null);
+    });
     return () => { cancelled = true; };
   }, [selectedTicker]);
 
@@ -980,7 +1017,8 @@ export default function JudgmentDetail({
                     title="過去 8Q 決算反応"
                     tier={2}
                     defaultOpen={false}
-                    summary="発表翌日の株価変化"
+                    summary={formatEarningsReactionSummary(earningsReactionSummary) || '発表翌日の株価変化'}
+                    proTag={!canUse('earnings_8q', plan)}
                   >
                     <PremiumLock
                       feature="earnings_8q"
@@ -1000,7 +1038,7 @@ export default function JudgmentDetail({
                     title="Insider 取引"
                     tier={2}
                     defaultOpen={false}
-                    summary="直近 90 日の売買"
+                    summary={formatInsiderSummary(insiderFormsForSummary) || '直近 90 日の売買'}
                     controlledOpen={expandedSections.has('insider') || undefined}
                   >
                     <InsiderPanel ticker={selectedTicker} l3Headings />

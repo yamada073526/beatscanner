@@ -181,6 +181,21 @@
   /* background は inline style で動的指定 (badgeColor prop) */
 }
 
+/* ===== Pro tag (v313 Sprint S3 C2、 mockup .pro-tag 相当) ===== */
+/* summary 直後に表示する gold バッジ。 gold token のみ使用 (raw hex 禁止、 elevation_scale.md whitelist)。
+   figure 章見出しの Pro バッジ (JudgmentDetail.jsx) と同一意匠 (color-mix gold, 一貫性)。 */
+.proTag {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--color-gold);
+  padding: 1px 7px;
+  border-radius: var(--radius-sm, 6px);
+  border: 1px solid color-mix(in srgb, var(--color-gold) 35%, transparent);
+  background: color-mix(in srgb, var(--color-gold) 10%, transparent);
+}
+
 /* ===== Header right cluster (streaming indicator + label) ===== */
 .headerRight {
   display: flex;

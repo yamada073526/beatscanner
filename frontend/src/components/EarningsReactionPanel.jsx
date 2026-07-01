@@ -11,11 +11,14 @@
  *   - SPEC_2026-05-23_fmp-premium-features.md §3
  */
 import { useEffect, useState } from 'react';
+import { fetchEarningsReaction } from '../api.js';
 
+// v313 Sprint S3 (C5 訂正・AUDIT_pane3_2026-07-01.md §①-c3): In-line (サプライズなし=中立事象) に
+// amber(警告色) を使うのは色ルール「amber=緊急・警告」からの逸脱。mockup 準拠の無彩色(muted)へ変更。
 const VERDICT_COLOR = {
   beat: 'var(--color-gain)',
   miss: 'var(--color-loss)',
-  'in-line': 'var(--color-warning)',
+  'in-line': 'var(--text-muted)',
   unknown: 'var(--text-muted)',
 };
 
@@ -48,10 +51,9 @@ export default function EarningsReactionPanel({ ticker, l3Headings = false }) {
     setLoading(true);
     setError(null);
     setData(null);
-    fetch(`/api/earnings-reaction/${encodeURIComponent(ticker)}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d) => { if (!cancelled) setData(d); })
-      .catch((e) => { if (!cancelled) setError(e.message); })
+    // v313 Sprint S3: dedupGet 経由 (JudgmentDetail の collapsed summary fetch と coalesce)
+    fetchEarningsReaction(ticker)
+      .then((d) => { if (!cancelled) { if (d) setData(d); else setError('取得できませんでした'); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [ticker]);

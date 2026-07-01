@@ -1,7 +1,9 @@
+import { useEffect, useState } from 'react';
 import NewsPanel from '../../../../../components/NewsPanel.jsx';
 import IRLinksPanel from '../../../../../components/IRLinksPanel.jsx';
 import TenKLinksPanel from '../../../../../components/TenKLinksPanel.jsx';
 import { AccordionSection } from '../../../primitives/index.js';
+import { fetchNews } from '../../../../../api.js';
 
 /**
  * L6「その他」fold 群の末尾 1 fold =「ニュース · IR · 10-K」(一次ソースへのリンク)。
@@ -29,19 +31,57 @@ const SUB_HEADING_STYLE = {
   margin: '0 0 var(--space-3, 12px)',
 };
 
+// v313 Sprint S3 (C2): ニュース鮮度の相対表示 (NewsPanel.jsx timeAgo() と同系ロジックの軽量版、
+// collapsed summary 専用のため export はしない)。
+function formatNewsFreshness(dateStr) {
+  if (!dateStr) return '';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  if (!Number.isFinite(diff) || diff < 0) return '';
+  const h = Math.floor(diff / 3600000);
+  if (h < 1) return '数分前';
+  if (h < 24) return `${h}時間前`;
+  return `${Math.floor(h / 24)}日前`;
+}
+
 export default function ContextSection({
   selectedTicker,
   useWorkspaceReader,
   expandedSections,
 }) {
+  // v313 Sprint S3 (C2): fold の collapsed summary を「最新N件・X時間前更新」に動的復元 (§⑤ e1)。
+  // fold 折りたたみ時は NewsPanel が unmount されるため、親が非LLM source を prefetch する。
+  // limit=10 は prefetchAll() の fetchNews(ticker, 10) と同一 URL → dedupGet cache hit で追加 fetch 実質 0。
+  const [newsSummaryData, setNewsSummaryData] = useState(null);
+  useEffect(() => {
+    if (!selectedTicker) {
+      setNewsSummaryData(null);
+      return undefined;
+    }
+    let cancelled = false;
+    fetchNews(selectedTicker, 10).then((items) => {
+      if (cancelled) return;
+      if (!Array.isArray(items) || items.length === 0) {
+        setNewsSummaryData(null);
+        return;
+      }
+      setNewsSummaryData({ count: items.length, freshest: items[0]?.published });
+    });
+    return () => { cancelled = true; };
+  }, [selectedTicker]);
+
   if (!selectedTicker) return null;
+
+  const newsSummaryText = newsSummaryData
+    ? `最新${newsSummaryData.count}件・${formatNewsFreshness(newsSummaryData.freshest)}更新`
+    : '一次ソースへのリンク';
+
   return (
     <AccordionSection
       id="sec-references"
       title="ニュース · IR · 10-K"
       tier={2}
       defaultOpen={false}
-      summary="一次ソースへのリンク"
+      summary={newsSummaryText}
       controlledOpen={expandedSections.has('references') || undefined}
     >
       <div
