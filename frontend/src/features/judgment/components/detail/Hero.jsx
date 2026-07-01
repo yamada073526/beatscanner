@@ -281,7 +281,8 @@ export default function Hero({
         {/* ticker 左側: ロゴ + テキスト情報 */}
         {/* 視覚 fidelity (2026-06-28): 正本 mockup .id-row は align-items:center (logo を name ブロック中央へ)。
             旧 flex-start + marginTop:9 hack は ticker 40px 前提だったので撤去 (ticker 26px 化に伴い不要)。 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3, 12px)', minWidth: 0, flex: 1 }}>
+        {/* 2026-07-01 user 微調整: row2 を text-block に含めるため flex-start (ロゴを ticker 上端に揃える)。 */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-3, 12px)', minWidth: 0, flex: 1 }}>
           {/* Sprint 2: 企業ロゴ。視覚 fidelity: mockup .logo は 52px 角丸13px (同定層の主役) なので 40→52px。
               fadeIn=true / monoFallback=true (neutral gray・投資業界色ルール) / shape='rounded' (--radius-md)。 */}
           <div style={{ flexShrink: 0 }}>
@@ -337,7 +338,15 @@ export default function Hero({
               {[companyName, period].filter(Boolean).join(' · ')}
             </div>
           )}
-          {/* id-meta: セクター/次決算カウントダウンは row2 へ移設 (2026-07-01 user)。テキストは ticker + 社名·FY のみ。 */}
+          {/* row2 (2026-07-01 user 微調整): 次決算カウントダウン + セクターを社名の【直下】に配置。
+              従来は id-row の外・下に置いていたため、背の高い右列(価格/リターン/最終更新/ウォッチ)との差で
+              ticker と row2 の間に不自然な余白が出ていた。text-block 内へ移し社名直下に密着させる。 */}
+          {(countdownPill || sectorPill) && (
+            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-2, 8px)', marginTop: 'var(--space-2, 8px)' }}>
+              {countdownPill}
+              {sectorPill}
+            </div>
+          )}
           </div>{/* end: テキスト情報 div */}
         </div>{/* end: ロゴ + テキスト flex div */}
         {/* Sprint 3: EarningsRing が wrapper(ring + 下ラベル) を返すため flex-start に変更
@@ -405,15 +414,7 @@ export default function Hero({
             </Chip>
           )}
           </div>{/* end: 株価列 + ring + verdict クラスタ */}
-        </div>{/* end: id-row */}
-        {/* row2 (2026-07-01 user 確定レイアウト): 次決算カウントダウン pill + セクター pill。
-            ウォッチ追加ボタンは株価列 (期間別リターンの下) へ移設済。 */}
-        {(countdownPill || sectorPill) && (
-          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-2, 8px)' }}>
-            {countdownPill}
-            {sectorPill}
-          </div>
-        )}
+        </div>{/* end: id-row (row2 は左 text-block 内へ移設・社名直下) */}
       </div>
     </Card>
   );
