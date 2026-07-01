@@ -187,10 +187,14 @@ export default function Hero({
 
   // C10 #4 (正本 mockup pane3-full-v5 §L0 .row2): 次決算カウントダウン pill + ウォッチ追加ボタンを
   //   id-row の「下」(row2) に集約。従来 countdown=id-meta / watch=右上クラスタ だったが mockup 構造へ合わせる。
+  // 2026-07-01 UI/UX レビュー: amber を「本当に直近の決算」に限定 (常時 amber は警告色の意味と
+  //   ブランドのリッチさを損なう)。earnings-urgency skill の閾値に整合: ≤14 日 (approaching) = amber、
+  //   >14 日 = neutral (強調なし)。§38: 残日数は時間事実で買い推奨でない。閾値定数の SSOT は
+  //   ChartTab.jsx:TickerRow だが、本 pill は「amber か neutral か」の 2 値のみで軽量に判定。
+  const countdownIsNear = Number.isFinite(nextEarningsDays) && nextEarningsDays > 0 && nextEarningsDays <= 14;
   const countdownPill =
     Number.isFinite(nextEarningsDays) && nextEarningsDays > 0 && !hideCountdownChip ? (
-      // §38: 決算までの日数は時間事実であり買い推奨でない。amber = 投資業界の「警告/注目」色 (CLAUDE.md)。
-      <span style={heroFactChipCountdown}>次決算まで {nextEarningsDays} 日</span>
+      <span style={countdownIsNear ? heroFactChipCountdown : heroFactChipStyle}>次決算まで {nextEarningsDays} 日</span>
     ) : null;
   // 2026-07-01 user 確定: セクター pill を row2 の「次決算まで」隣に配置。sector 源は JudgmentDetail で
   //   profile-extended.sector を優先 (technicalRs.sector は universe-cache 依存で欠落しがち)。§38 事実指標・neutral 色。
