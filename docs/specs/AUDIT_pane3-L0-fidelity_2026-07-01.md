@@ -79,3 +79,18 @@ mockup-fidelity 三分類の「意図不明は accidental と決め打ちせず 
 - ⏹ C10 #6 (地合い grid) / #7 (RS ゲージ) — user 決定「やらない」(mockup に無い新機能)
 - ⏸ §③ 4-5 / 4-6 / 2-1 — §38 gate (mockup へ戻さず mockup 側を更新)
 - ⏸ 2-2・微差 — user 判断待ち
+
+---
+
+## grounding 検証ログ (mockup-fidelity Phase 0 gate)
+
+`verify-claims.sh` で監査台帳 C10 #3-8 の主張を ground-truth 照合 (`scripts/example-claims.tsv` が再現 fixture)。
+
+```
+PASS=1  FAIL=5  WARN=0  → exit 1
+FAIL C10-3/6/7/8: mockup 主張根拠が mockup に不在 (FABRICATED) + L0IdentityBand が実在しない (PHANTOM)
+FAIL C10-4:       L0IdentityBand.jsx が実在しない (PHANTOM)
+PASS SECTOR-OK:   secpill / pane3-hero-sector は双方に実在 (対比)
+```
+
+→ #3-8 は phantom/fabricated 由来のため `F (mockup 復元)` 分類は誤り。本 sprint は grounding PASS した項目 (#4 の WL 位置・#8 の CLAUDE.md ルール・2-3 の RS 出典) のみ着地した。
