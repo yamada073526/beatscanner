@@ -287,6 +287,37 @@ jobs:
             echo "### ⚠️ earnings-annual evaluated=0 警告 (GRANT 漏れの可能性)" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      # じっちゃま 5 条件 四半期 evaluation (Pane3 §②「5条件 充足の推移」の data source)。
+      # 2026-07-01 発見: /api/admin/refresh-earnings-history が cron 未登録の手動専用エンドポイントの
+      #   ままだったため、 earnings_evaluation が 2026-05-15 で更新停止していた (NVDA 等主要銘柄も
+      #   直近四半期が未反映)。 上の earnings-annual と同根の停止だが、 annual 側のみ本ファイルで
+      #   先に是正済みだった (quarterly 側=本 step が見逃されていた)。
+      # endpoint 自体が引数無しで S&P500 top 200 を内部 fetch し Semaphore(16) で処理するため、
+      #   canslim/earnings-annual のような offset chunk 化は不要 (単発呼出しで完結)。
+      - name: Earnings quarterly evaluation (5条件充足の推移) refresh
+        id: earnings_quarterly_eval
+        continue-on-error: true
+        run: |
+          echo "=== refresh-earnings-history (S&P500 top 200, single call) ==="
+          resp=$(curl -s --max-time 300 -w '\nHTTP:%{http_code}' -X POST \
+            -H "X-Cron-Secret: $CRON_SECRET" -H 'Content-Type: application/json' \
+            -d '{}' "$BASE/api/admin/refresh-earnings-history")
+          http=$(echo "$resp" | tail -1 | sed 's/.*HTTP://')
+          body=$(echo "$resp" | sed '$d')
+          proc=$(echo "$body" | jq -r '.tickers_processed // 0' 2>/dev/null || echo 0)
+          hist_rows=$(echo "$body" | jq -r '.history_total_rows // 0' 2>/dev/null || echo 0)
+          eval_rows=$(echo "$body" | jq -r '.evaluation_total_rows // 0' 2>/dev/null || echo 0)
+          echo "refresh-earnings-history: http=$http processed=$proc history_rows=$hist_rows eval_rows=$eval_rows"
+          echo "### Earnings quarterly evaluation refresh" >> "$GITHUB_STEP_SUMMARY"
+          echo "- http=\`$http\` processed=\`$proc\` history_rows=\`$hist_rows\` eval_rows=\`$eval_rows\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$http" != "200" ]; then
+            echo "::warning::refresh-earnings-history が HTTP $http (gateway timeout の可能性。次 nightly で再試行)。"
+          fi
+          if [ "${proc:-0}" -gt 0 ] && [ "${eval_rows:-0}" -eq 0 ]; then
+            echo "::warning::refresh-earnings-history の evaluation が 0 件 (processed=$proc)。earnings_evaluation の service_role GRANT を確認 (feedback_supabase_grant_bug)。"
+            echo "### ⚠️ earnings_evaluation upsert 0 件警告 (GRANT 漏れの可能性)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Freshness gate (DB を真とする — 502 でなく stale を job 失敗に — Sprint 0)
         run: |
           set +e  # curl/jq の非ゼロで step を落とさない。判定は fail 変数 + 明示 exit。
