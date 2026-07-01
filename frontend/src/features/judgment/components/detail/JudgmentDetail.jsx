@@ -53,7 +53,7 @@ import { DetailInstanceTickerContext } from '../../primitives/DetailInstanceTick
 // v108 議題 5A (multi-review 5/5 verdict「release 前 mandatory」):
 // Forward P/E / PEG / 配当性向 / Buyback比率 を KpiStrip に追加するための fetcher。
 // 金商法 §38 / 景表法 §5 配慮で narration / 警告 chip なし、 数値のみ。
-import { fetchValuationExtras, fetchTechnical, TECHNICAL_CANONICAL_PATTERNS, fetchProfileExtended, fetchEarningsReaction, fetchInsider } from '../../../../api.js';
+import { fetchValuationExtras, fetchTechnical, TECHNICAL_CANONICAL_PATTERNS, fetchProfileExtended, fetchEarningsReaction, fetchInsider, fetchQuarterlyHistory } from '../../../../api.js';
 import { classifyBuyZone } from '../../../../lib/buyZoneLabels.js';
 // v313 Sprint S3 (C2 Pro tag): 8Q fold の Pro tag 表示要否判定 (現在プランで earnings_8q が未解放か)
 import { canUse } from '../../../../lib/planGating.js';
@@ -396,6 +396,23 @@ export default function JudgmentDetail({
     fetchEarningsReaction(selectedTicker).then((d) => {
       if (cancelled) return;
       setEarningsReactionSummary(d?.summary || null);
+    });
+    return () => { cancelled = true; };
+  }, [selectedTicker]);
+
+  // v313 Sprint S4 followup (mockup .goodq、決算3点直下): 「良い決算連続」バナー用の beat_streak。
+  // EarningsGrowthSpark(成長トレンド) も同一 endpoint(limit=8) を fetch するため dedupGet で coalesce
+  // (追加 fetch 実質 0)。
+  const [goodQuarterStreak, setGoodQuarterStreak] = useState(null);
+  useEffect(() => {
+    if (!selectedTicker) {
+      setGoodQuarterStreak(null);
+      return undefined;
+    }
+    let cancelled = false;
+    fetchQuarterlyHistory(selectedTicker, 8).then((d) => {
+      if (cancelled) return;
+      setGoodQuarterStreak(Number.isFinite(d?.beat_streak) ? d.beat_streak : null);
     });
     return () => { cancelled = true; };
   }, [selectedTicker]);
@@ -775,6 +792,7 @@ export default function JudgmentDetail({
                   <EarningsThreePoint
                     guidance={guidance}
                     isLoading={!guidance && (detail?.isLoading ?? false)}
+                    beatStreak={goodQuarterStreak}
                   />
 
                   {/* hairline */}

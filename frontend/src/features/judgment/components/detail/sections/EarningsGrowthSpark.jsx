@@ -28,10 +28,6 @@
 import { useEffect, useState, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchQuarterlyHistory } from '../../../../../api.js';
-// v313 Sprint S4 follow-up (user dogfood): 「良い決算N連続」は EPS 単独の成長トレンド chip と
-// 同じ緑 chip 形状だと直下の EPS bar (緑) と視覚的にグルーピングされ「EPS だけの話」に誤読されるため、
-// mockup pane3-full-v4.html §継続性 の .pillbox 意匠 (dot+太字値+gold「KB核心」タグ) に統一する。
-import { Pillbox } from './L3QualityFold.jsx';
 
 const TESTID = 'earnings-growth-spark';
 
@@ -404,7 +400,8 @@ export default function EarningsGrowthSpark({ ticker }) {
   const [error, setError] = useState(null);
   const [tip, setTip] = useState(null); // { quarter, x, y } | null
   // Sprint 4a: backend 派生値（同一 fetch から読むだけ。frontend で再計算しない）。
-  const [beatStreak, setBeatStreak] = useState(0);          // 良い決算（EPS+売上 とも beat）連続期数
+  // v313 Sprint S4 followup: beat_streak (良い決算連続) は mockup .goodq 通り EarningsThreePoint.jsx
+  // (決算3点直下) へ移設。JudgmentDetail.jsx が同一 endpoint を親で fetch しdedupGet coalesce。
   const [epsYoyAccel, setEpsYoyAccel] = useState(null);     // EPS YoY 加速度: 'accelerating'|'decelerating'|'flat'|null
 
   useEffect(() => {
@@ -413,7 +410,6 @@ export default function EarningsGrowthSpark({ ticker }) {
     setLoading(true);
     setError(null);
     setData(null);
-    setBeatStreak(0);
     setEpsYoyAccel(null);
     setTip(null);
     fetchQuarterlyHistory(ticker, 8)
@@ -423,7 +419,6 @@ export default function EarningsGrowthSpark({ ticker }) {
           setData(null);
         } else {
           setData(res.history); // 新しい順（history[0] = 最新）
-          setBeatStreak(Number.isFinite(res.beat_streak) ? res.beat_streak : 0);
           setEpsYoyAccel(res.eps_yoy_acceleration ?? null);
         }
       })
@@ -507,33 +502,18 @@ export default function EarningsGrowthSpark({ ticker }) {
   }
 
   // Sprint 4a: 上部 summary 行（パッと見 2 秒の anchor）。
-  //   良い決算 N 期連続（beat_streak>=2）+ EPS 直近加速/減速（backend eps_yoy_acceleration）。
+  //   EPS 直近加速/減速（backend eps_yoy_acceleration）。
   //   加速注記は直近 2Q の eps_yoy_pct が揃う時のみ（title に実数値を併記し誠実に根拠提示）。
+  // v313 Sprint S4 followup: 良い決算連続 chip は mockup .goodq 通り EarningsThreePoint.jsx へ移設済み。
   const accelMeta = ACCEL_META[epsYoyAccel] || null;
   const curEpsYoY = Number.isFinite(epsData[0]) ? epsData[0] : null;
   const prevEpsYoY = Number.isFinite(epsData[1]) ? epsData[1] : null;
-  const showStreak = beatStreak >= 2;
   const showAccel = !!accelMeta && curEpsYoY !== null && prevEpsYoY !== null;
 
   return (
     <div data-testid={TESTID} data-state="main">
-      {(showStreak || showAccel) && (
+      {showAccel && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-          {showStreak && (
-            <span
-              data-testid="good-quarter-streak-chip"
-              aria-label={`良い決算 ${beatStreak} 期連続`}
-              title={`EPS と売上がともに市場予想を上回った決算が直近 ${beatStreak} 四半期連続`}
-            >
-              <Pillbox
-                label="良い決算 連続"
-                value={`${beatStreak}期`}
-                tag="KB核心"
-                tagTone="gold"
-                dotTone="gain"
-              />
-            </span>
-          )}
           {showAccel && (
             <SummaryChip
               testid="eps-yoy-accel-chip"
