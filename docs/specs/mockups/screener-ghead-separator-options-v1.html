@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<!--
+  screener ghead カテゴリ仕切り 改善案 比較 mockup (PR #126 dogfood feedback 2026-06-29)
+  対象: sector_leader preset の 2 段 sticky header
+    列: 銘柄 | セクター内順位[rank] | CF創出力[quality] ROE[quality] | 機関保有増[demand] | RS[rs]
+    カテゴリ: (なし) | 収益の質(CF創出力+ROE) | 需給(機関保有増) | (なし)
+  問題: 現状はカテゴリラベル下の 1px border-bottom のみ。列間の faint な縦線と区別がつかず、
+        「収益の質」「需給」の境界・各カテゴリと子列の対応が読み取りづらい。
+  実トークン (dark): bg-card #1e2433 / border #334155 / border-strong rgba(255,255,255,.14) /
+        text-muted #94a3b8 / text-secondary #cbd5e1 / color-gold #d4af37
+-->
+<html lang="ja"><head><meta charset="utf-8"><title>ghead 仕切り 改善案</title>
+<style>
+  :root{
+    --bg-page:#161b27; --bg-card:#1e2433; --bg-future:#121a28;
+    --text-primary:#f1f5f9; --text-secondary:#cbd5e1; --text-muted:#94a3b8;
+    --border:#334155; --border-strong:rgba(255,255,255,.14);
+    --color-gold:#d4af37; --color-accent:#38bdf8;
+    --cols: minmax(150px,1fr) 86px 72px 60px 76px 48px;
+    --gap:12px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg-page);color:var(--text-primary);
+    font-family:-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;padding:28px 22px 60px;}
+  h1{font-size:16px;font-weight:700;margin:0 0 4px;letter-spacing:.01em}
+  .sub{color:var(--text-muted);font-size:12px;margin:0 0 26px;line-height:1.6}
+  .opt{margin-bottom:30px}
+  .opt-h{display:flex;align-items:baseline;gap:10px;margin:0 0 8px}
+  .opt-h .tag{font-size:11px;font-weight:700;color:#0b0f17;background:var(--color-accent);
+    border-radius:5px;padding:2px 8px}
+  .opt-h .tag.rec{background:var(--color-gold)}
+  .opt-h .name{font-size:13.5px;font-weight:650}
+  .opt-h .note{font-size:11.5px;color:var(--text-muted)}
+  .card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+
+  /* ── 共通 grid ── */
+  .ghead,.head,.row{display:grid;grid-template-columns:var(--cols);gap:var(--gap);
+    padding:0 16px;align-items:end}
+  .ghead{height:24px;padding-top:6px}
+  .gz{display:flex;align-items:flex-end;justify-content:center;font-size:9.5px;font-weight:600;
+    letter-spacing:.06em;color:var(--text-muted);white-space:nowrap;padding-bottom:2px}
+  .head{height:34px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+  .hc{font-size:10.5px;font-weight:600;color:var(--text-secondary);text-align:center;line-height:1.25}
+  .hc.name{text-align:left;color:var(--text-muted)}
+  .hc small{display:block;color:var(--text-muted);font-weight:500;font-size:9px}
+  .row{height:46px;align-items:center;border-bottom:1px solid rgba(255,255,255,.04)}
+  .rc{font-size:13px;font-weight:700;text-align:center;color:var(--text-primary)}
+  .rc.name{text-align:left;font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:8px}
+  .rc.name .dot{width:18px;height:18px;border-radius:50%;background:#2b3346;flex:none}
+  .rc.name .tk{font-weight:700}.rc.name .co{font-weight:400;color:var(--text-muted);font-size:10px}
+  .rc.pos{color:#4ade80}.rc.rs{color:var(--color-gold)}
+  .pill{font-size:10.5px;font-weight:700;background:#2b3346;color:var(--text-secondary);
+    border-radius:999px;padding:3px 9px}
+
+  /* ============ 現状 (baseline) ============ */
+  .b0 .gz.zone{border-bottom:1px solid var(--border-strong)}
+
+  /* ============ A: 区画を背景バンドで面分け ============ */
+  .bandwrap{position:relative}
+  .bA .band{position:absolute;top:0;border-radius:8px 8px 0 0;pointer-events:none}
+  .bA .band.b1{background:rgba(255,255,255,.035)} /* 収益の質 */
+  .bA .band.b2{background:rgba(56,189,248,.05)}   /* 需給: ほんのり accent 寄り */
+  .bA .gz{position:relative;z-index:2}
+  .bA .gz.zone{color:var(--text-secondary)}
+
+  /* ============ B: 区画境界だけに縦 hairline + ラベル bracket ============ */
+  .bB .sep{position:absolute;top:4px;width:1px;background:var(--border-strong);pointer-events:none}
+  .bB .gz.zone .lbl{border-bottom:1.5px solid color-mix(in srgb,var(--color-accent) 55%,transparent);
+    padding:0 6px 2px}
+
+  /* ============ C: 余白 + ラベル bracket (線なし) ============ */
+  .bC .ghead,.bC .head,.bC .row{grid-template-columns:minmax(150px,1fr) 86px 18px 72px 60px 18px 76px 18px 48px}
+  .bC .gz.spacer,.bC .hc.spacer,.bC .rc.spacer{padding:0}
+  .bC .gz.zone .lbl{border-bottom:1.5px solid var(--text-muted);padding:0 4px 2px}
+
+  /* ============ D: Hybrid (推奨) 背景バンド + bracket + 境界 hairline ============ */
+  .bD .band{position:absolute;top:0;border-radius:8px 8px 0 0;pointer-events:none}
+  .bD .band.b1{background:rgba(255,255,255,.04)}
+  .bD .band.b2{background:rgba(56,189,248,.055)}
+  .bD .sep{position:absolute;top:3px;width:1px;
+    background:linear-gradient(to bottom,var(--border-strong),transparent);pointer-events:none}
+  .bD .gz{position:relative;z-index:2}
+  .bD .gz.zone .lbl{border-bottom:1.5px solid color-mix(in srgb,var(--color-gold) 50%,transparent);
+    padding:0 6px 2px;color:var(--text-secondary)}
+</style></head>
+<body>
+  <h1>screener カテゴリ仕切り 改善案 — sector_leader header</h1>
+  <p class="sub">PR #126 dogfood feedback。現状は「ラベル下の細い線」だけで、列間の faint な線と区別がつかず
+    <b>収益の質 / 需給 の境界</b>と<b>各カテゴリ ↔ 子列の対応</b>が読み取りづらい。<br>
+    §38 中立色ルール厳守 (数値は色で意味づけしない / gold は別格)。すべて design token 由来・raw hex なし前提。</p>
+
+  <!-- ===== 現状 ===== -->
+  <div class="opt b0">
+    <div class="opt-h"><span class="tag" style="background:#475569;color:#e2e8f0">現状</span>
+      <span class="name">baseline — ラベル下線のみ</span>
+      <span class="note">境界が弱い。これが今回の改善対象</span></div>
+    <div class="card">
+      <div class="ghead">
+        <div class="gz"></div><div class="gz"></div>
+        <div class="gz zone" style="grid-column:span 2">収益の質</div>
+        <div class="gz zone">需給</div><div class="gz"></div>
+      </div>
+      <div class="head">
+        <div class="hc name">銘柄</div><div class="hc">セクター<small>内順位</small></div>
+        <div class="hc">CF<small>創出力</small></div><div class="hc">ROE</div>
+        <div class="hc">機関<small>保有増</small></div><div class="hc">RS</div>
+      </div>
+      <div class="row"><div class="rc name"><span class="dot"></span><span><span class="tk">ASTH</span> <span class="co">Astrana</span></span></div>
+        <div class="rc"><span class="pill">上位</span></div><div class="rc">35%</div><div class="rc">42%</div><div class="rc pos">+61%</div><div class="rc rs">99</div></div>
+    </div>
+  </div>
+
+  <!-- ===== A: 背景バンド ===== -->
+  <div class="opt bA">
+    <div class="opt-h"><span class="tag">A</span><span class="name">区画を背景バンドで面分け</span>
+      <span class="note">Notion/Linear 風。境界=バンドの縁、ラベル↔子列=同じ面で直感的</span></div>
+    <div class="card bandwrap">
+      <div class="band b1" id="A-b1"></div><div class="band b2" id="A-b2"></div>
+      <div class="ghead">
+        <div class="gz"></div><div class="gz"></div>
+        <div class="gz zone" style="grid-column:span 2">収益の質</div>
+        <div class="gz zone">需給</div><div class="gz"></div>
+      </div>
+      <div class="head">
+        <div class="hc name">銘柄</div><div class="hc">セクター<small>内順位</small></div>
+        <div class="hc">CF<small>創出力</small></div><div class="hc">ROE</div>
+        <div class="hc">機関<small>保有増</small></div><div class="hc">RS</div>
+      </div>
+      <div class="row"><div class="rc name"><span class="dot"></span><span><span class="tk">ASTH</span> <span class="co">Astrana</span></span></div>
+        <div class="rc"><span class="pill">上位</span></div><div class="rc">35%</div><div class="rc">42%</div><div class="rc pos">+61%</div><div class="rc rs">99</div></div>
+    </div>
+  </div>
+
+  <!-- ===== B: 境界 hairline + bracket ===== -->
+  <div class="opt bB">
+    <div class="opt-h"><span class="tag">B</span><span class="name">区画境界だけ縦 hairline + ラベル下線</span>
+      <span class="note">列間の線を消し、意味ある境界(区画)にのみ線。最小限の線で明快</span></div>
+    <div class="card" style="position:relative" id="B-host">
+      <div class="sep" id="B-s1"></div><div class="sep" id="B-s2"></div><div class="sep" id="B-s3"></div>
+      <div class="ghead">
+        <div class="gz"></div><div class="gz"></div>
+        <div class="gz zone" style="grid-column:span 2"><span class="lbl">収益の質</span></div>
+        <div class="gz zone"><span class="lbl">需給</span></div><div class="gz"></div>
+      </div>
+      <div class="head">
+        <div class="hc name">銘柄</div><div class="hc">セクター<small>内順位</small></div>
+        <div class="hc">CF<small>創出力</small></div><div class="hc">ROE</div>
+        <div class="hc">機関<small>保有増</small></div><div class="hc">RS</div>
+      </div>
+      <div class="row"><div class="rc name"><span class="dot"></span><span><span class="tk">ASTH</span> <span class="co">Astrana</span></span></div>
+        <div class="rc"><span class="pill">上位</span></div><div class="rc">35%</div><div class="rc">42%</div><div class="rc pos">+61%</div><div class="rc rs">99</div></div>
+    </div>
+  </div>
+
+  <!-- ===== C: 余白 ===== -->
+  <div class="opt bC">
+    <div class="opt-h"><span class="tag">C</span><span class="name">余白で区切る + ラベル bracket (線なし)</span>
+      <span class="note">Apple 風。空白が境界。最もミニマルだが横幅を食う</span></div>
+    <div class="card">
+      <div class="ghead">
+        <div class="gz"></div><div class="gz"></div><div class="gz spacer"></div>
+        <div class="gz zone" style="grid-column:span 2"><span class="lbl">収益の質</span></div>
+        <div class="gz spacer"></div><div class="gz zone"><span class="lbl">需給</span></div>
+        <div class="gz spacer"></div><div class="gz"></div>
+      </div>
+      <div class="head">
+        <div class="hc name">銘柄</div><div class="hc">セクター<small>内順位</small></div><div class="hc spacer"></div>
+        <div class="hc">CF<small>創出力</small></div><div class="hc">ROE</div><div class="hc spacer"></div>
+        <div class="hc">機関<small>保有増</small></div><div class="hc spacer"></div><div class="hc">RS</div>
+      </div>
+      <div class="row"><div class="rc name"><span class="dot"></span><span><span class="tk">ASTH</span> <span class="co">Astrana</span></span></div>
+        <div class="rc"><span class="pill">上位</span></div><div class="rc spacer"></div><div class="rc">35%</div><div class="rc">42%</div><div class="rc spacer"></div><div class="rc pos">+61%</div><div class="rc spacer"></div><div class="rc rs">99</div></div>
+    </div>
+  </div>
+
+  <!-- ===== D: Hybrid 推奨 ===== -->
+  <div class="opt bD">
+    <div class="opt-h"><span class="tag rec">D 推奨</span><span class="name">Hybrid — 背景バンド + gold bracket + 境界 hairline(減衰)</span>
+      <span class="note">面で括り、bracket でラベル↔子列を結び、境界線は body へ向け fade。リッチさと明快さの両立</span></div>
+    <div class="card bandwrap" style="position:relative" id="D-host">
+      <div class="band b1" id="D-b1"></div><div class="band b2" id="D-b2"></div>
+      <div class="sep" id="D-s1"></div><div class="sep" id="D-s2"></div>
+      <div class="ghead">
+        <div class="gz"></div><div class="gz"></div>
+        <div class="gz zone" style="grid-column:span 2"><span class="lbl">収益の質</span></div>
+        <div class="gz zone"><span class="lbl">需給</span></div><div class="gz"></div>
+      </div>
+      <div class="head">
+        <div class="hc name">銘柄</div><div class="hc">セクター<small>内順位</small></div>
+        <div class="hc">CF<small>創出力</small></div><div class="hc">ROE</div>
+        <div class="hc">機関<small>保有増</small></div><div class="hc">RS</div>
+      </div>
+      <div class="row"><div class="rc name"><span class="dot"></span><span><span class="tk">ASTH</span> <span class="co">Astrana</span></span></div>
+        <div class="rc"><span class="pill">上位</span></div><div class="rc">35%</div><div class="rc">42%</div><div class="rc pos">+61%</div><div class="rc rs">99</div></div>
+      <div class="row" style="border:none"><div class="rc name"><span class="dot"></span><span><span class="tk">HIMS</span> <span class="co">Hims</span></span></div>
+        <div class="rc"><span class="pill">上位</span></div><div class="rc">28%</div><div class="rc">31%</div><div class="rc pos">+44%</div><div class="rc rs">94</div></div>
+    </div>
+  </div>
+
+<script>
+  // grid 実測でカテゴリ区画の背景バンド / 境界 hairline を列位置に正確に合わせる
+  function colRects(headEl){
+    const cs=getComputedStyle(headEl);
+    const cols=cs.gridTemplateColumns.split(' ').map(Number);
+    const padL=parseFloat(cs.paddingLeft), gap=parseFloat(cs.columnGap)||12;
+    const rects=[]; let x=padL;
+    for(let i=0;i<cols.length;i++){ rects.push([x,x+cols[i]]); x+=cols[i]+gap; }
+    return {rects,gap};
+  }
+  function place(hostId, headSel, spans){
+    const host=document.getElementById(hostId); if(!host) return;
+    const head=host.querySelector(headSel); const {rects,gap}=colRects(head);
+    const H=host.clientHeight;
+    return {host,rects,gap,H};
+  }
+  function band(el, rects, c0, c1, gap, h){
+    if(!el) return; const L=rects[c0][0]-gap/2, R=rects[c1][1]+gap/2;
+    el.style.left=L+'px'; el.style.width=(R-L)+'px'; el.style.height=h+'px';
+  }
+  function sep(el, rects, atColStart, gap, host){
+    if(!el) return; const X=rects[atColStart][0]-gap/2;
+    el.style.left=X+'px'; el.style.height=(host.clientHeight-6)+'px';
+  }
+  function go(){
+    // 列 index: 0 銘柄 / 1 セクター内順位 / 2 CF / 3 ROE / 4 機関 / 5 RS
+    // A: bands
+    {const a=place('A-b1'?null:null);}
+    [['A','#A-b1','#A-b2'],['D','#D-b1','#D-b2']].forEach(([p,s1,s2])=>{
+      const host=document.querySelector('.b'+p+' .card'); const head=host.querySelector('.head');
+      const {rects,gap}=colRects(head); const gh=host.querySelector('.ghead');
+      const bandH=gh.offsetHeight+host.querySelector('.head').offsetHeight;
+      band(host.querySelector(s1),rects,2,3,gap,bandH); // 収益の質: CF..ROE
+      band(host.querySelector(s2),rects,4,4,gap,bandH); // 需給: 機関
+    });
+    // B / D seps at zone boundaries: before CF(2), before 機関(4), (B also before RS(5))
+    {const host=document.getElementById('B-host');const head=host.querySelector('.head');const {rects,gap}=colRects(head);
+      sep(document.getElementById('B-s1'),rects,2,gap,host);
+      sep(document.getElementById('B-s2'),rects,4,gap,host);
+      sep(document.getElementById('B-s3'),rects,5,gap,host);}
+    {const host=document.getElementById('D-host');const head=host.querySelector('.head');const {rects,gap}=colRects(head);
+      sep(document.getElementById('D-s1'),rects,2,gap,host);
+      sep(document.getElementById('D-s2'),rects,4,gap,host);}
+  }
+  window.addEventListener('load',()=>{requestAnimationFrame(()=>requestAnimationFrame(go));});
+</script>
+</body></html>

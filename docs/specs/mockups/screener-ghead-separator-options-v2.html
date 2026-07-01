@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<!--
+  screener ghead カテゴリ仕切り 改善案 v2 — subagent 2体 verdict 統合後の finalist 比較。
+  v1 feedback: 使い勝手=D推奨 / 視覚設計=B+C折衷推奨。対立点(背景band・gold・cyan)を踏まえ token-safe に再設計。
+  両 subagent 一致点を全案に共通適用: ①cyan 不使用 ②ghead↔列ヘッダに border-top 1px (子分類 水平区切り)
+  finalist:
+    B+  : 境界hairline(列間線の約2倍コントラスト) + bracket下線(カテゴリ列幅span 1.5px) + 先頭+4px。背景/gold なし。
+    D-n : token-safe richer = 中立 fade band + 中立 bracket + 境界hairline(減衰)。gold/cyan を排し neutral 化。
+  実トークン(dark): bg-card #1e2433 / border #334155 / border-strong rgba(255,255,255,.14) /
+    text-muted #94a3b8 / text-secondary #cbd5e1
+-->
+<html lang="ja"><head><meta charset="utf-8"><title>ghead 仕切り v2 finalist</title>
+<style>
+  :root{
+    --bg-page:#161b27; --bg-card:#1e2433;
+    --text-primary:#f1f5f9; --text-secondary:#cbd5e1; --text-muted:#94a3b8;
+    --border:#334155; --border-strong:rgba(255,255,255,.14);
+    --cols: minmax(150px,1fr) 86px 72px 60px 76px 48px; --gap:12px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg-page);color:var(--text-primary);
+    font-family:-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;padding:28px 22px 50px;}
+  h1{font-size:16px;font-weight:700;margin:0 0 4px}
+  .sub{color:var(--text-muted);font-size:11.5px;margin:0 0 24px;line-height:1.65}
+  .sub b{color:var(--text-secondary)}
+  .opt{margin-bottom:30px}
+  .opt-h{display:flex;align-items:baseline;gap:10px;margin:0 0 8px;flex-wrap:wrap}
+  .opt-h .tag{font-size:11px;font-weight:700;color:#0b0f17;background:#64748b;border-radius:5px;padding:2px 8px}
+  .opt-h .tag.rec{background:#d4af37}
+  .opt-h .name{font-size:13.5px;font-weight:650}
+  .opt-h .note{font-size:11.5px;color:var(--text-muted)}
+  .card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;overflow:hidden;position:relative}
+
+  .ghead,.head,.row{display:grid;grid-template-columns:var(--cols);gap:var(--gap);padding:0 16px;align-items:end}
+  .ghead{height:26px;padding-top:7px;position:relative;z-index:2}
+  .gz{display:flex;align-items:flex-end;justify-content:center;font-size:9.5px;font-weight:600;
+    letter-spacing:.06em;color:var(--text-muted);white-space:nowrap;padding-bottom:4px;position:relative;z-index:2}
+  .gz.zone{color:var(--text-secondary)}
+  .head{height:36px;padding-bottom:8px;border-bottom:1px solid var(--border);position:relative;z-index:2}
+  .hc{font-size:10.5px;font-weight:600;color:var(--text-secondary);text-align:center;line-height:1.25}
+  .hc.name{text-align:left;color:var(--text-muted)}
+  .hc small{display:block;color:var(--text-muted);font-weight:500;font-size:9px}
+  .row{height:46px;align-items:center;border-bottom:1px solid rgba(255,255,255,.04);position:relative;z-index:2}
+  .rc{font-size:13px;font-weight:700;text-align:center;color:var(--text-primary)}
+  .rc.name{text-align:left;font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:8px}
+  .rc.name .dot{width:18px;height:18px;border-radius:50%;background:#2b3346;flex:none}
+  .rc.name .co{font-weight:400;color:var(--text-muted);font-size:10px}
+  .rc.pos{color:#4ade80}.rc.rs{color:#d4af37}
+  .pill{font-size:10.5px;font-weight:700;background:#2b3346;color:var(--text-secondary);border-radius:999px;padding:3px 9px}
+
+  /* 両案共通: 子分類 水平区切り (ghead と head の段分け) */
+  .common .head{border-top:1px solid var(--border)}
+
+  /* ===== B+ : 強化 hairline + bracket span ===== */
+  .bBp .sep{position:absolute;width:1px;background:color-mix(in srgb,var(--text-muted) 30%,transparent);
+    top:5px;z-index:1;pointer-events:none}                       /* 列間線(.14)の約2倍コントラスト */
+  .bBp .bracket{position:absolute;height:1.5px;background:color-mix(in srgb,var(--text-muted) 42%,transparent);
+    z-index:3;pointer-events:none}                               /* カテゴリ列幅 span 下線 */
+
+  /* ===== D-n : token-safe richer (中立 fade band + 中立 bracket + 減衰 hairline) ===== */
+  .bDn .band{position:absolute;top:0;border-radius:8px 8px 0 0;z-index:1;pointer-events:none;
+    background:linear-gradient(to bottom, rgba(255,255,255,.045), rgba(255,255,255,.012));}
+  .bDn .sep{position:absolute;width:1px;top:4px;z-index:1;pointer-events:none;
+    background:linear-gradient(to bottom, color-mix(in srgb,var(--text-muted) 32%,transparent), transparent);}
+  .bDn .bracket{position:absolute;height:1.5px;z-index:3;pointer-events:none;
+    background:color-mix(in srgb,var(--text-muted) 45%,transparent);}
+</style></head>
+<body>
+  <h1>screener カテゴリ仕切り v2 — finalist 2案 (subagent verdict 統合)</h1>
+  <p class="sub">対立点を解消: <b>cyan/gold/背景への意味付けは不使用</b> (Gold Continuity / No-Cyan / bg-future token 体系を保護)。
+    両案とも <b>ghead↔列ヘッダ間に border-top 1px</b> を共通適用 (子分類 水平区切り、両 subagent 一致)。<br>
+    <b>B+</b>=線のコントラストだけで解決 (最もブランド静粛・実装最小)。 <b>D-n</b>=中立色で「面」も足した richer 版 (gold/cyan 排除済)。</p>
+
+  <!-- B+ -->
+  <div class="opt bBp common">
+    <div class="opt-h"><span class="tag rec">B+ 推奨</span><span class="name">境界hairline(強化) + bracket下線(列幅span)</span>
+      <span class="note">列間の faint 線を消し、区画境界だけ約2倍コントラスト。背景なし</span></div>
+    <div class="card" id="Bp-host">
+      <div class="ghead">
+        <div class="gz"></div><div class="gz"></div>
+        <div class="gz zone" style="grid-column:span 2">収益の質</div>
+        <div class="gz zone">需給</div><div class="gz"></div>
+      </div>
+      <div class="head">
+        <div class="hc name">銘柄</div><div class="hc">セクター<small>内順位</small></div>
+        <div class="hc">CF<small>創出力</small></div><div class="hc">ROE</div>
+        <div class="hc">機関<small>保有増</small></div><div class="hc">RS</div>
+      </div>
+      <div class="row"><div class="rc name"><span class="dot"></span><span>ASTH <span class="co">Astrana</span></span></div>
+        <div class="rc"><span class="pill">上位</span></div><div class="rc">35%</div><div class="rc">42%</div><div class="rc pos">+61%</div><div class="rc rs">99</div></div>
+      <div class="row" style="border:none"><div class="rc name"><span class="dot"></span><span>HIMS <span class="co">Hims</span></span></div>
+        <div class="rc"><span class="pill">上位</span></div><div class="rc">28%</div><div class="rc">31%</div><div class="rc pos">+44%</div><div class="rc rs">94</div></div>
+    </div>
+  </div>
+
+  <!-- D-n -->
+  <div class="opt bDn common">
+    <div class="opt-h"><span class="tag">D-n</span><span class="name">token-safe richer (中立 fade band + 中立 bracket + 減衰hairline)</span>
+      <span class="note">D の「面で括る」良さを残し gold/cyan を中立色へ。やや装飾多め</span></div>
+    <div class="card" id="Dn-host">
+      <div class="ghead">
+        <div class="gz"></div><div class="gz"></div>
+        <div class="gz zone" style="grid-column:span 2">収益の質</div>
+        <div class="gz zone">需給</div><div class="gz"></div>
+      </div>
+      <div class="head">
+        <div class="hc name">銘柄</div><div class="hc">セクター<small>内順位</small></div>
+        <div class="hc">CF<small>創出力</small></div><div class="hc">ROE</div>
+        <div class="hc">機関<small>保有増</small></div><div class="hc">RS</div>
+      </div>
+      <div class="row"><div class="rc name"><span class="dot"></span><span>ASTH <span class="co">Astrana</span></span></div>
+        <div class="rc"><span class="pill">上位</span></div><div class="rc">35%</div><div class="rc">42%</div><div class="rc pos">+61%</div><div class="rc rs">99</div></div>
+      <div class="row" style="border:none"><div class="rc name"><span class="dot"></span><span>HIMS <span class="co">Hims</span></span></div>
+        <div class="rc"><span class="pill">上位</span></div><div class="rc">28%</div><div class="rc">31%</div><div class="rc pos">+44%</div><div class="rc rs">94</div></div>
+    </div>
+  </div>
+
+<script>
+  function colRects(head){
+    const cs=getComputedStyle(head); const cols=cs.gridTemplateColumns.split(' ').map(Number);
+    const padL=parseFloat(cs.paddingLeft), gap=parseFloat(cs.columnGap)||12;
+    const rects=[]; let x=padL; for(let i=0;i<cols.length;i++){rects.push([x,x+cols[i]]); x+=cols[i]+gap;}
+    return {rects,gap};
+  }
+  function el(html){const d=document.createElement('div');d.className=html;return d;}
+  // 列 index: 0 銘柄 / 1 セクター内順位 / 2 CF / 3 ROE / 4 機関 / 5 RS
+  // 区画: 収益の質=[2,3], 需給=[4,4]。境界=列2先頭・列4先頭・列5先頭(=区画終わり)
+  function build(hostId, opts){
+    const host=document.getElementById(hostId); const head=host.querySelector('.head');
+    const gh=host.querySelector('.ghead'); const {rects,gap}=colRects(head);
+    const ghBottom=gh.offsetTop+gh.offsetHeight; const headBottom=head.offsetTop+head.offsetHeight;
+    const zones=[[2,3],[4,4]];
+    // 縦境界 seps
+    const sepCols = opts.sepAtEnd ? [2,4,5] : [2,4];
+    sepCols.forEach(c=>{ const s=el('sep'); s.style.left=(rects[c][0]-gap/2)+'px';
+      s.style.height=((opts.sepToHead?headBottom:ghBottom)-5)+'px'; host.appendChild(s);});
+    // bracket: 各 zone の列幅いっぱいに ghead 下端へ下線
+    zones.forEach(([a,b])=>{ const br=el('bracket'); const L=rects[a][0], R=rects[b][1];
+      br.style.left=L+'px'; br.style.width=(R-L)+'px'; br.style.top=(ghBottom-2)+'px'; host.appendChild(br);});
+    // band (D-n のみ)
+    if(opts.band){ const bandH=headBottom; zones.forEach(([a,b])=>{ const bd=el('band');
+      const L=rects[a][0]-gap/2, R=rects[b][1]+gap/2; bd.style.left=L+'px'; bd.style.width=(R-L)+'px';
+      bd.style.height=bandH+'px'; host.appendChild(bd);});}
+  }
+  window.addEventListener('load',()=>requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    build('Bp-host',{sepAtEnd:false, sepToHead:false, band:false});
+    build('Dn-host',{sepAtEnd:false, sepToHead:true, band:true});
+  })));
+</script>
+</body></html>

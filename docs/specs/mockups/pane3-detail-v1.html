@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>銘柄詳細 (Pane 3) 正本 mockup v1 — 再構成 IA</title>
+<style>
+  :root {
+    /* design_system.md §1 dark tokens */
+    --bg-primary: #0f172a;
+    --bg-card: #1e2433;
+    --bg-subtle: #1e2a3a;
+    --bg-muted: #243447;
+    --bg-future: #121a28;
+    --text-primary: #f1f5f9;
+    --text-secondary: #cbd5e1;
+    --text-muted: #94a3b8;
+    --border: #334155;
+    --border-strong: rgba(255, 255, 255, 0.14);
+    --gain: #34ef81;
+    --loss: #f87171;
+    --warning: #f59e0b;
+    --amber-title: #fbbf24;
+    --accent: #38bdf8;
+    --radius: 14px;
+    --radius-sm: 9px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-6: 24px;
+    --space-8: 32px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  a { color: inherit; text-decoration: none; }
+  body {
+    margin: 0;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    padding: 28px 0 80px;
+  }
+  .detail {
+    width: 760px;
+    max-width: calc(100vw - 32px);
+    margin: 0 auto;
+    display: grid;
+    gap: var(--space-6);
+  }
+  .mock-tag {
+    width: 760px; max-width: calc(100vw - 32px); margin: 0 auto 14px;
+    font-size: 11px; letter-spacing: .04em; color: var(--text-muted);
+    text-transform: uppercase;
+  }
+  .num { font-variant-numeric: tabular-nums; }
+  .pos { color: var(--gain); }
+  .neg { color: var(--loss); }
+  .warn { color: var(--warning); }
+  .muted { color: var(--text-muted); }
+  .sec { color: var(--text-secondary); }
+  .hair { height: 1px; background: var(--border); border: 0; margin: 0; }
+
+  /* ── L0 同定 ─────────────────────────────── */
+  .id-row { display: flex; align-items: center; gap: var(--space-4); }
+  .logo {
+    width: 52px; height: 52px; border-radius: 13px; background: var(--bg-muted);
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 20px;
+    color: var(--text-secondary); flex: 0 0 auto;
+  }
+  .id-name { display: flex; flex-direction: column; gap: 3px; }
+  .id-ticker { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; line-height: 1; }
+  .id-company { font-size: 13px; color: var(--text-secondary); }
+  .id-spacer { flex: 1; }
+  .id-price { text-align: right; display: flex; flex-direction: column; gap: 2px; }
+  .id-price .p { font-size: 22px; font-weight: 700; }
+  .id-meta { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+  .pill-meta {
+    font-size: 11.5px; color: var(--text-secondary); border: 1px solid var(--border);
+    border-radius: 999px; padding: 3px 10px; background: var(--bg-subtle);
+  }
+  .pill-countdown { color: var(--amber-title); border-color: rgba(245, 158, 11, .3); }
+  .wl-btn {
+    margin-left: auto; font-size: 12px; color: var(--text-secondary);
+    border: 1px solid var(--border); border-radius: 999px; padding: 5px 13px; background: var(--bg-subtle);
+  }
+
+  /* ── L1 判定サマリー (at-a-glance verdict layer) ─────────── */
+  .verdict {
+    background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: var(--radius);
+    padding: var(--space-6); display: grid; gap: var(--space-4);
+  }
+  .verdict-head { display: flex; align-items: baseline; justify-content: space-between; }
+  .verdict-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-secondary); }
+  .verdict-state { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .dot-mid { background: var(--warning); }
+  .buckets { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+  .bucket {
+    background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 13px 14px; cursor: pointer; display: grid; gap: 5px; position: relative;
+  }
+  .bucket:hover { border-color: var(--border-strong); }
+  .bucket.lead { background: var(--bg-future); border-color: rgba(255,255,255,.12); }
+  .b-label { font-size: 11.5px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+  .b-main { font-size: 19px; font-weight: 700; }
+  .b-sub { font-size: 11.5px; color: var(--text-secondary); }
+  .b-drill { position: absolute; top: 11px; right: 11px; font-size: 11px; color: var(--text-muted); }
+  .star { color: var(--amber-title); font-size: 11px; }
+  .streak-rs { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+  .mini {
+    background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 11px 14px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .mini .k { font-size: 12px; color: var(--text-muted); }
+  .mini .v { font-size: 15px; font-weight: 700; }
+  .rs-scale { font-size: 11px; color: var(--text-muted); }
+
+  /* ── On This Page 目次 ─────────────────────── */
+  .toc { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 12px; }
+  .toc .toc-label { color: var(--text-muted); margin-right: 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+  .toc a {
+    color: var(--text-secondary); text-decoration: none; border: 1px solid var(--border);
+    border-radius: 999px; padding: 4px 12px; background: var(--bg-subtle);
+  }
+  .toc a:hover { border-color: var(--border-strong); color: var(--text-primary); }
+
+  /* ── Chapter ───────────────────────────────── */
+  .chapter { display: grid; gap: var(--space-4); }
+  .ch-head { display: flex; align-items: center; gap: 10px; }
+  .ch-idx { font-size: 12px; font-weight: 700; color: var(--text-muted); letter-spacing: .04em; }
+  .ch-title { font-size: 17px; font-weight: 700; }
+  .ch-note { font-size: 12px; color: var(--text-muted); margin-left: auto; }
+  .l2h { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-secondary); margin: 2px 0; }
+
+  /* 決算3点 detail */
+  .earn-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+  .earn-cell { padding: 14px 4px; }
+  .earn-cell .k { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+  .earn-cell .v { font-size: 21px; font-weight: 700; }
+  .earn-cell .c { font-size: 12px; color: var(--text-secondary); margin-top: 3px; }
+  .future-strip {
+    background: var(--bg-future); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 13px 16px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .future-strip .lbl { font-size: 12px; color: var(--text-muted); }
+  .future-strip .val { font-size: 15px; font-weight: 700; }
+
+  /* 8Q spark */
+  .spark-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-6); }
+  .spark { display: grid; gap: 8px; }
+  .spark .k { font-size: 12px; color: var(--text-secondary); display: flex; justify-content: space-between; }
+  .bars { display: flex; align-items: flex-end; gap: 5px; height: 46px; }
+  .bars i { flex: 1; background: var(--bg-muted); border-radius: 3px 3px 0 0; display: block; }
+  .bars i.up { background: var(--gain); opacity: .85; }
+  .bchart { display: flex; align-items: flex-end; gap: 5px; height: 64px; }
+  .bcol { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; height: 100%; }
+  .bcol .bv { font-size: 9px; color: var(--text-muted); font-variant-numeric: tabular-nums; line-height: 1; }
+  .bcol .bb { width: 100%; background: var(--bg-muted); border-radius: 3px 3px 0 0; }
+  .bcol .bb.up { background: var(--gain); opacity: .85; }
+  .baxis { display: flex; justify-content: space-between; font-size: 9.5px; color: var(--text-muted); margin-top: 6px; }
+
+  /* 5条件 card (★唯一の発光) */
+  .five {
+    background: var(--bg-card); border: 1px solid rgba(56,189,248,.22); border-radius: var(--radius);
+    padding: var(--space-6); box-shadow: 0 0 0 1px rgba(56,189,248,.10), 0 8px 34px rgba(56,189,248,.08);
+    display: grid; gap: var(--space-4);
+  }
+  .five-head { display: flex; align-items: baseline; justify-content: space-between; }
+  .five-title { font-size: 14px; font-weight: 700; }
+  .five-score { font-size: 13px; color: var(--text-secondary); }
+  .five-list { display: grid; gap: 10px; }
+  .cond { display: flex; align-items: center; gap: 11px; font-size: 13.5px; }
+  .cond .mk { width: 20px; height: 20px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex: 0 0 auto; }
+  .mk-ok { background: rgba(52,239,129,.14); color: var(--gain); }
+  .mk-no { background: rgba(148,163,184,.12); color: var(--text-muted); }
+  .cond-t { flex: 1; }
+  .cond-v { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .spark-foot { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .spark-foot b { color: var(--text-secondary); font-weight: 700; }
+  .v-context { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
+  .v-context .tag { font-size: 10.5px; color: var(--text-muted); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; }
+  .buyq { display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; color: var(--text-secondary); padding-top: 2px; }
+  .buyq .muted { font-size: 11.5px; }
+
+  /* collapsed section (progressive disclosure) */
+  .fold {
+    border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-subtle);
+    padding: 15px 18px; display: flex; align-items: center; gap: 12px;
+  }
+  .fold .chev { color: var(--text-muted); font-size: 13px; }
+  .fold .f-title { font-size: 14px; font-weight: 600; }
+  .fold .f-sum { font-size: 12px; color: var(--text-muted); margin-left: auto; text-align: right; }
+
+  /* PriceLadder */
+  .ladder { display: grid; gap: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+  .rung { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; font-size: 13px; border-bottom: 1px solid var(--border); }
+  .rung:last-child { border-bottom: 0; }
+  .rung.now { background: var(--bg-future); }
+  .rung .lv { color: var(--text-secondary); }
+  .rung .px { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .rung .ds { font-size: 11.5px; color: var(--text-muted); width: 64px; text-align: right; }
+  .chart-ph {
+    height: 150px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: linear-gradient(180deg, rgba(56,189,248,.05), transparent); display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 12px;
+  }
+  .ret-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 14px; }
+  .ret-cell { font-size: 13px; }
+  .ret-cell .k { font-size: 11px; color: var(--text-muted); }
+  .ret-cell .v { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  /* 図解 Pro lock */
+  .figure-lock {
+    position: relative; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+    background: var(--bg-card); min-height: 168px;
+  }
+  .figure-blur {
+    filter: blur(7px); opacity: .5; padding: 20px; display: grid; gap: 10px;
+    background: repeating-linear-gradient(135deg, var(--bg-subtle) 0 16px, var(--bg-muted) 16px 32px);
+    height: 168px;
+  }
+  .figure-cta {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    background: rgba(15,23,42,.45);
+  }
+  .figure-cta .lock { font-size: 18px; }
+  .figure-cta .t { font-size: 14px; font-weight: 700; }
+  .figure-cta .s { font-size: 12px; color: var(--text-secondary); }
+  .figure-cta .btn { margin-top: 4px; font-size: 12.5px; font-weight: 600; color: var(--bg-primary); background: var(--accent); border-radius: 999px; padding: 7px 16px; }
+
+  .footnote { font-size: 11px; color: var(--text-muted); }
+</style>
+</head>
+<body>
+  <div class="mock-tag">正本 mockup v1 · 銘柄詳細 (Pane 3) 再構成 · サンプルデータ</div>
+  <main class="detail">
+
+    <!-- ───────── L0 同定 (社名 + 最小価格・判定でなく同定) ───────── -->
+    <section class="id-row" id="top">
+      <div class="logo"></div>
+      <div class="id-name">
+        <div class="id-ticker">AAPL</div>
+        <div class="id-company">Apple Inc. · FY2025 Q3</div>
+        <div class="id-meta">
+          <span class="pill-meta pill-countdown">次決算まで 12 日</span>
+          <span class="pill-meta">テクノロジー</span>
+        </div>
+      </div>
+      <div class="id-spacer"></div>
+      <div class="id-price">
+        <div class="p num">$283.78</div>
+        <div class="num pos">+3.14% <span class="muted">($8.64)</span></div>
+        <div class="num muted" style="font-size:11.5px">1W <span class="neg">−4.78%</span> · 1M <span class="neg">−9.19%</span></div>
+      </div>
+      <button class="wl-btn">☆ ウォッチ追加</button>
+    </section>
+
+    <!-- ───────── L1 判定サマリー (at-a-glance・2秒・決算3点が主役) ───────── -->
+    <section class="verdict">
+      <div class="verdict-head">
+        <div class="verdict-title">判定サマリー</div>
+        <div class="verdict-state"><span class="dot dot-mid"></span><span class="sec">条件充足 <b>3 / 5</b></span><span class="muted" title="ファンダ5条件のうち3条件が充足（状態の根拠は累進開示）">ⓘ</span></div>
+      </div>
+      <div class="v-context"><span class="tag">前提</span><span>地合い（市場全体）: <b class="sec">上昇局面</b>（指数が 50/200DMA 上方）<span class="muted" title="SPY/QQQ の移動平均位置を機械判定した状態表示で、相場予測ではありません">ⓘ</span></span></div>
+      <!-- 決算3点 named buckets (clickable → drill) -->
+      <div class="buckets">
+        <a class="bucket lead" href="#earnings">
+          <span class="b-drill">詳細 ↓</span>
+          <span class="b-label"><span class="star">★</span> EPS（対コンセンサス）</span>
+          <span class="b-main num pos">+4.2%</span>
+          <span class="b-sub">$1.64 ／ 予想 $1.57</span>
+        </a>
+        <a class="bucket lead" href="#earnings">
+          <span class="b-drill">詳細 ↓</span>
+          <span class="b-label"><span class="star">★</span> 売上（対コンセンサス）</span>
+          <span class="b-main num pos">+1.8%</span>
+          <span class="b-sub">$94.9B ／ 予想 $93.2B</span>
+        </a>
+        <a class="bucket lead" href="#earnings">
+          <span class="b-drill">詳細 ↓</span>
+          <span class="b-label"><span class="star">★</span> ガイダンス（来期）</span>
+          <span class="b-main sec">維持</span>
+          <span class="b-sub">コンセンサス比 ほぼ同水準</span>
+        </a>
+      </div>
+      <div class="streak-rs">
+        <a class="mini" href="#earnings">
+          <span class="k">連続ビート</span>
+          <span class="v num">3<span class="sec" style="font-size:12px;font-weight:400">Q 連続</span></span>
+        </a>
+        <a class="mini" href="#technical">
+          <span class="k">RS（相対強さ）</span>
+          <span><span class="v num">71</span> <span class="rs-scale">· 目安 80+ で強い</span></span>
+        </a>
+      </div>
+    </section>
+
+    <!-- ───────── On This Page 目次 ───────── -->
+    <nav class="toc">
+      <span class="toc-label">On this page</span>
+      <a href="#earnings">決算</a>
+      <a href="#quality">品質・継続性</a>
+      <a href="#technical">テクニカル・買い場</a>
+      <a href="#figure">図解</a>
+      <a href="#more">その他</a>
+    </nav>
+
+    <hr class="hair" />
+
+    <!-- ───────── L2 決算 (ファンダの本丸) ───────── -->
+    <section class="chapter" id="earnings">
+      <div class="ch-head">
+        <span class="ch-idx">①</span><span class="ch-title">決算</span>
+        <span class="ch-note">直近 FY2025 Q3 · 8/1 発表</span>
+      </div>
+
+      <div class="l2h">決算3点 — 対コンセンサス</div>
+      <div class="earn-grid">
+        <div class="earn-cell">
+          <div class="k">EPS</div>
+          <div class="v num pos">$1.64</div>
+          <div class="c">予想 $1.57 · <span class="pos">+4.2%</span></div>
+        </div>
+        <div class="earn-cell">
+          <div class="k">売上</div>
+          <div class="v num pos">$94.9B</div>
+          <div class="c">予想 $93.2B · <span class="pos">+1.8%</span></div>
+        </div>
+        <div class="earn-cell">
+          <div class="k">ガイダンス（来期）</div>
+          <div class="v sec">維持</div>
+          <div class="c">来期 EPS $1.71 ≈ コンセンサス</div>
+        </div>
+      </div>
+      <div class="future-strip">
+        <span class="lbl">来期コンセンサス（YoY）</span>
+        <span class="val"><span class="num sec">売上 +6.1%</span> · <span class="num sec">EPS +8.4%</span></span>
+      </div>
+
+      <hr class="hair" />
+
+      <div class="l2h">成長トレンド（直近 8Q）</div>
+      <div class="spark-row">
+        <div class="spark">
+          <div class="k"><span>EPS 成長率 YoY（%）</span><span class="pos" style="font-weight:700">直近 +34%</span></div>
+          <div class="bchart">
+            <div class="bcol"><span class="bv">+12</span><span class="bb" style="height:16px"></span></div>
+            <div class="bcol"><span class="bv">+15</span><span class="bb" style="height:20px"></span></div>
+            <div class="bcol"><span class="bv">+14</span><span class="bb" style="height:18px"></span></div>
+            <div class="bcol"><span class="bv">+21</span><span class="bb" style="height:28px"></span></div>
+            <div class="bcol"><span class="bv">+24</span><span class="bb" style="height:32px"></span></div>
+            <div class="bcol"><span class="bv">+28</span><span class="bb" style="height:38px"></span></div>
+            <div class="bcol"><span class="bv">+30</span><span class="bb up" style="height:42px"></span></div>
+            <div class="bcol"><span class="bv">+34</span><span class="bb up" style="height:48px"></span></div>
+          </div>
+          <div class="baxis"><span>FY23 Q4</span><span class="pos">加速 ↗</span><span>FY25 Q3</span></div>
+        </div>
+        <div class="spark">
+          <div class="k"><span>売上 成長率 YoY（%）</span><span class="sec" style="font-weight:700">直近 +6.0%</span></div>
+          <div class="bchart">
+            <div class="bcol"><span class="bv">+5.1</span><span class="bb" style="height:30px"></span></div>
+            <div class="bcol"><span class="bv">+4.8</span><span class="bb" style="height:27px"></span></div>
+            <div class="bcol"><span class="bv">+5.0</span><span class="bb" style="height:29px"></span></div>
+            <div class="bcol"><span class="bv">+5.2</span><span class="bb" style="height:31px"></span></div>
+            <div class="bcol"><span class="bv">+5.5</span><span class="bb" style="height:34px"></span></div>
+            <div class="bcol"><span class="bv">+5.6</span><span class="bb" style="height:35px"></span></div>
+            <div class="bcol"><span class="bv">+5.9</span><span class="bb up" style="height:39px"></span></div>
+            <div class="bcol"><span class="bv">+6.0</span><span class="bb up" style="height:40px"></span></div>
+          </div>
+          <div class="baxis"><span>FY23 Q4</span><span>横ばい →</span><span>FY25 Q3</span></div>
+        </div>
+      </div>
+
+      <hr class="hair" />
+
+      <!-- 5条件カード ★唯一の発光カード = 単一焦点 -->
+      <div class="five">
+        <div class="five-head">
+          <div class="five-title">ファンダメンタル 5 条件</div>
+          <div class="five-score num">充足 3 / 5</div>
+        </div>
+        <div class="five-list">
+          <div class="cond"><span class="mk mk-ok">✓</span><span class="cond-t">営業CF &gt; 純利益（CFの質）</span><span class="cond-v">$110B &gt; $94B</span></div>
+          <div class="cond"><span class="mk mk-ok">✓</span><span class="cond-t">EPS 成長 加速（直近 8Q）</span><span class="cond-v">+34% ／ 8Q前 +12%</span></div>
+          <div class="cond"><span class="mk mk-ok">✓</span><span class="cond-t">ROE 17% 以上</span><span class="cond-v">147%（基準 17%）</span></div>
+          <div class="cond"><span class="mk mk-no">—</span><span class="cond-t">売上 高成長（YoY 20% 以上）</span><span class="cond-v">+6.0% ／ 基準 20%</span></div>
+          <div class="cond"><span class="mk mk-no">—</span><span class="cond-t">ガイダンス 引き上げ</span><span class="cond-v">維持 ／ 基準 引上げ</span></div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="hair" />
+
+    <!-- ───────── L3 品質・継続性 (累進開示: 畳む) ───────── -->
+    <section class="chapter" id="quality">
+      <div class="ch-head"><span class="ch-idx">②</span><span class="ch-title">品質・継続性</span><span class="ch-note">サマリー常時 · 詳細は展開</span></div>
+      <div class="fold"><span class="chev">▸</span><span class="f-title">営業CFマージン</span><span class="f-sum">28.4%（理想帯 15–35%）· 良好</span></div>
+      <div class="fold"><span class="chev">▸</span><span class="f-title">ROE / PER / PEG</span><span class="f-sum">ROE 147%（基準 17%↑）· PER 31.2 · PEG 2.8</span></div>
+      <div class="fold"><span class="chev">▸</span><span class="f-title">機関投資家 保有トレンド</span><span class="f-sum">QoQ +0.6pt · 緩やかに増加</span></div>
+      <div class="fold"><span class="chev">▸</span><span class="f-title">会社概要・セグメント</span><span class="f-sum">iPhone 51% · Services 26% · ほか</span></div>
+    </section>
+
+    <hr class="hair" />
+
+    <!-- ───────── L4 テクニカル・買い場 (ファンダの後・価格/リターンはここへ降格) ───────── -->
+    <section class="chapter" id="technical">
+      <div class="ch-head"><span class="ch-idx">③</span><span class="ch-title">テクニカル・買い場</span><span class="ch-note">順張りシグナル 一部</span></div>
+      <div class="chart-ph">価格チャート（日足・50/200DMA・出来高）</div>
+
+      <div class="l2h">価格ラダー</div>
+      <div class="ladder">
+        <div class="rung"><span class="lv">アナリスト目標</span><span class="px num">$305.00</span><span class="ds">+7.5%</span></div>
+        <div class="rung"><span class="lv">pivot 水準（観察点）</span><span class="px num">$288.50</span><span class="ds">+1.7%</span></div>
+        <div class="rung now"><span class="lv sec"><b>現在価格</b></span><span class="px num">$283.78</span><span class="ds">—</span></div>
+        <div class="rung"><span class="lv">50 日線</span><span class="px num">$274.10</span><span class="ds">-3.4%</span></div>
+        <div class="rung"><span class="lv">サポート</span><span class="px num">$262.00</span><span class="ds">-7.7%</span></div>
+        <div class="rung"><span class="lv">リスク確認ライン（−8%）</span><span class="px num">$261.08</span><span class="ds">-8.0%</span></div>
+      </div>
+      <div class="buyq"><span>ブレイクアウト強度（参考）</span><span class="muted">O'Neil 基準: ブレイク時 出来高 +40% 以上が目安</span></div>
+
+      <div class="l2h">期間別リターン</div>
+      <div class="ret-grid">
+        <div class="ret-cell"><div class="k">1W</div><div class="v neg">-4.78%</div></div>
+        <div class="ret-cell"><div class="k">1M</div><div class="v neg">-9.19%</div></div>
+        <div class="ret-cell"><div class="k">3M</div><div class="v pos">+14.06%</div></div>
+        <div class="ret-cell"><div class="k">6M</div><div class="v pos">+3.80%</div></div>
+        <div class="ret-cell"><div class="k">1Y</div><div class="v pos">+41.13%</div></div>
+        <div class="ret-cell"><div class="k">3Y</div><div class="v pos">+49.95%</div></div>
+        <div class="ret-cell"><div class="k">5Y</div><div class="v pos">+110.5%</div></div>
+        <div class="ret-cell"><div class="k">10Y</div><div class="v pos">+1,102%</div></div>
+      </div>
+    </section>
+
+    <hr class="hair" />
+
+    <!-- ───────── L5 図解 (Pro) ───────── -->
+    <section class="chapter" id="figure">
+      <div class="ch-head"><span class="ch-idx">④</span><span class="ch-title">図解で理解する</span><span class="ch-note">Pro</span></div>
+      <div class="figure-lock">
+        <div class="figure-blur"><div></div><div></div><div></div></div>
+        <div class="figure-cta">
+          <div class="lock"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+          <div class="t">この決算を 1 枚の図解で</div>
+          <div class="s">数値の因果を視覚で 2 秒理解</div>
+          <div class="btn">Pro で解錠</div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="hair" />
+
+    <!-- ───────── L6 その他 (畳む・目次から到達) ───────── -->
+    <section class="chapter" id="more">
+      <div class="ch-head"><span class="ch-idx">⑤</span><span class="ch-title">その他</span></div>
+      <div class="fold"><span class="chev">▸</span><span class="f-title">アナリスト視点</span><span class="f-sum">目標 $305 · n=37 · 更新 6/15</span></div>
+      <div class="fold"><span class="chev">▸</span><span class="f-title">市場の声</span><span class="f-sum">直近ニュースの論点要約</span></div>
+      <div class="fold"><span class="chev">▸</span><span class="f-title">過去 8Q 決算反応</span><span class="f-sum">発表翌日の株価変化</span></div>
+      <div class="fold"><span class="chev">▸</span><span class="f-title">Insider 取引</span><span class="f-sum">直近 90 日の売買</span></div>
+      <div class="fold"><span class="chev">▸</span><span class="f-title">ニュース · IR · 10-K</span><span class="f-sum">一次ソースへのリンク</span></div>
+    </section>
+
+    <p class="footnote">数値はモックアップ用のサンプル。実装時は SEC/FMP（数値）> KB（観点）の出典 footer を各セクションに付与。状態・ガイダンスは色信号 + §38-safe ラベルのみ（買い/売りの行動指示は出さない）。</p>
+  </main>
+</body>
+</html>

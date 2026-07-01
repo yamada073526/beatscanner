@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BeatScanner スクリーナー結果テーブル v13（装飾の横展開: ゴールド標榜＋ガラスゾーン＋KB指標提案）</title>
+<style>
+  /* v12 を正本に、決算合格の演出を他 preset へ展開する検討用 mockup。
+     ① gold は「戦略内の別格」(上位サブセット) にのみ一貫使用 = gold continuity = signal。
+     ② ガラス(--bg-future) を「来期」以外の分類カテゴリ(収益の質/業種ローテ)の仕切りに拡張。色は中立(§38)。
+     ③ KB(trading.md) にあるが未搭載の指標をガラス「提案」列で追加検討。 */
+  :root{
+    --bg-primary:#0f172a; --bg-card:#1e2433; --bg-subtle:#1e2a3a; --bg-muted:#243447; --bg-hover:#253045;
+    --bg-future:#121a28;
+    --text-primary:#f1f5f9; --text-secondary:#cbd5e1; --text-muted:#94a3b8;
+    --color-gain:#34ef81; --color-loss:#f87171; --color-warning:#f59e0b; --color-accent:#38bdf8;
+    --gold:#d4af37; --gold-mid:#f4cd5d; --gold-wash:rgba(212,175,55,.055); --gold-line:rgba(212,175,55,.45);
+    --border:rgba(255,255,255,.08); --border-strong:rgba(255,255,255,.14);
+    --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;--s6:24px;--s8:32px;
+    --r-sm:8px;--r-md:12px;--r-lg:16px;--r-pill:9999px;
+    --font:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:radial-gradient(1200px 600px at 80% -10%,rgba(56,189,248,.05),transparent 60%),var(--bg-primary);
+    color:var(--text-primary);font-family:var(--font);-webkit-font-smoothing:antialiased;line-height:1.5;padding:var(--s8) var(--s6) 64px}
+  .wrap{max-width:840px;margin:0 auto}
+  .mock-tag{display:inline-block;font-size:11px;letter-spacing:.05em;color:var(--gold-mid);border:1px solid var(--gold-line);border-radius:var(--r-pill);padding:3px 11px;margin-bottom:var(--s3)}
+  h1{font-size:20px;font-weight:600;letter-spacing:-.01em;margin-bottom:var(--s2)}
+  .sub{color:var(--text-muted);font-size:13px;margin-bottom:var(--s5);line-height:1.7}
+  .sub b{color:var(--text-secondary)} .sub .gd{color:var(--gold-mid)}
+  .note{color:var(--text-muted);font-size:12px;margin-top:var(--s4);line-height:1.85}
+  .note b{color:var(--text-secondary)} .note .gd{color:var(--gold-mid)}
+
+  .seg{display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-pill);padding:3px;margin-bottom:var(--s4);flex-wrap:wrap}
+  .seg button{border:0;background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;padding:6px 14px;border-radius:var(--r-pill);cursor:pointer;transition:.2s}
+  .seg button.on{background:rgba(212,175,55,.15);color:var(--gold-mid);box-shadow:inset 0 0 0 1px var(--gold-line)}
+
+  .panel{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden}
+  .ph{display:flex;align-items:center;justify-content:space-between;padding:var(--s3) var(--s4);border-bottom:1px solid var(--border)}
+  .ph h2{font-size:14px;font-weight:600}
+  .ph .live{font-size:12px;color:var(--text-secondary)}
+  .ph .live b{color:var(--gold-mid);font-variant-numeric:tabular-nums;font-size:13px}
+
+  .list{max-height:540px;overflow:auto}
+
+  /* 2段ヘッダ: 上=カテゴリ仕切り(ガラス) / 下=列ラベル */
+  .ghead{position:sticky;top:0;z-index:3;display:grid;align-items:end;padding:var(--s2) var(--s4) 2px;background:var(--bg-subtle)}
+  .gzlabel{grid-row:1;align-self:stretch;display:flex;align-items:flex-end;justify-content:center;padding:3px 0;font-size:10px;letter-spacing:.06em;color:var(--text-muted)}
+  .gzlabel.is-glass{background:var(--bg-future);border-radius:var(--r-sm) var(--r-sm) 0 0;border-bottom:1px solid var(--gold-line)}
+  .gzlabel.is-proposed{color:var(--gold-mid)}
+  .gzlabel .badge{display:inline-block;font-size:9px;font-weight:700;color:#0b1220;background:var(--gold-mid);border-radius:3px;padding:0 4px;margin-left:5px;letter-spacing:0}
+
+  .lhead{position:sticky;top:24px;z-index:2;display:grid;align-items:center;padding:2px var(--s4) var(--s2);
+    background:var(--bg-subtle);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;letter-spacing:.03em;color:var(--text-muted)}
+  .lhead .h-num{text-align:right;font-variant-numeric:tabular-nums}
+  .lhead .h-num.is-glass{background:var(--bg-future)}
+
+  .row{display:grid;align-items:stretch;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;position:relative;
+    opacity:0;transform:translateY(6px);animation:rowin .5s cubic-bezier(.22,1,.36,1) forwards}
+  @keyframes rowin{to{opacity:1;transform:none}}
+  .row:last-child{border-bottom:0}
+  .row:hover{background:var(--bg-hover)}
+  /* ① ゴールド標榜行: gold 左レール(gradient) + ごく淡い wash。gold は「別格」にのみ一貫=signal */
+  .row.win{background:var(--gold-wash)}
+  .row.win::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,var(--gold-mid),var(--gold));z-index:1}
+  .row.win:hover{background:color-mix(in srgb,var(--gold) 9%,transparent)}
+
+  .row > .cell{display:flex;align-items:center;justify-content:flex-end;padding:var(--s2) var(--s3);min-width:0}
+  .row > .cell.tkcell{justify-content:flex-start;padding-left:var(--s4)}
+  /* ② ガラスゾーン: 来期以外の分類カテゴリを仕切る。背景わずか沈み(--bg-future)・色中立(§38) */
+  .row > .cell.is-glass{background:var(--bg-future)}
+  .row > .cell.gstart{position:relative}
+  .row > .cell.gstart::before{content:"";position:absolute;left:0;top:8%;bottom:8%;width:1px;background:var(--gold-line);opacity:.35}
+
+  .tk{display:flex;align-items:center;gap:var(--s2);min-width:0}
+  .logo{width:26px;height:26px;border-radius:var(--r-pill);flex:none;display:grid;place-items:center;font-size:10px;font-weight:700;color:#0b1220;font-family:var(--mono)}
+  .tkbody{min-width:0;display:flex;flex-direction:column;gap:2px}
+  .tkline{display:flex;align-items:baseline;gap:var(--s2);min-width:0}
+  .tkr{font-family:var(--mono);font-weight:600;font-size:14px;color:var(--text-primary)}
+  .winpip{font-size:12px;color:var(--gold-mid);flex:none;line-height:1}
+  .rs{font-family:var(--mono);font-size:12px;color:var(--text-secondary);font-variant-numeric:tabular-nums}
+  .rs.hi{color:var(--gold-mid);font-weight:600}
+  .subline{display:flex;align-items:center;gap:var(--s2);min-width:0}
+  .chip{display:inline-flex;align-items:center;font-size:10.5px;font-weight:600;color:var(--text-secondary);background:var(--bg-muted);border:1px solid var(--border);border-radius:var(--r-pill);padding:1px 7px;white-space:nowrap}
+  .chip.gold{color:var(--gold-mid);border-color:var(--gold-line);background:color-mix(in srgb,var(--gold) 8%,transparent)}
+  .nm{font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+
+  .num{font-family:var(--mono);font-weight:600;font-size:12.5px;color:var(--text-secondary);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+  .num.empty{color:var(--text-muted);font-weight:400}
+  .num.glass{color:var(--text-muted)}
+
+  .legend{display:flex;gap:var(--s4);flex-wrap:wrap;margin-top:var(--s4);font-size:11px;color:var(--text-muted)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:16px;height:14px;border-radius:3px;flex:none}
+  .sw.gold{background:var(--gold-wash);border-left:3px solid var(--gold)}
+  .sw.glass{background:var(--bg-future);border:1px solid var(--gold-line)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="mock-tag">MOCKUP v13 · 装飾の横展開（v12 決算合格を正本に）</span>
+  <h1>スクリーナー結果リスト — 演出を他 preset へ展開する案</h1>
+  <p class="sub"><b class="gd">①ゴールド標榜</b>＝戦略内の「別格」を上位サブセットだけ強調（gold は別格にのみ一貫＝signal）。<b>②ガラス</b>＝「来期」以外の<b>分類が違う</b>カテゴリ（収益の質／業種ローテ）の仕切り装置に拡張、数値は中立色のまま（§38）。<b class="gd">提案</b>＝KB（trading.md）にあるが screener 未搭載の指標。タブで preset を切替。</p>
+
+  <div class="seg" id="seg"></div>
+
+  <div class="panel">
+    <div class="ph"><h2 id="ptitle">結果</h2><span class="live">該当 <b id="pcount">–</b> 銘柄</span></div>
+    <div class="list">
+      <div class="ghead" id="ghead"></div>
+      <div class="lhead" id="lhead"></div>
+      <div id="rows"></div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span><span class="sw gold"></span> ゴールド標榜＝戦略内の別格（上位のみ＝信号）</span>
+    <span><span class="sw glass"></span> ガラス＝カテゴリ仕切り（数値は中立・§38）</span>
+    <span style="color:var(--gold-mid)">提案＝KB由来・未搭載（backend data 要）</span>
+  </div>
+
+  <p class="note" id="note"></p>
+</div>
+
+<script>
+const LOGOS={KNTK:'#06d6a0',BE:'#118ab2',UMC:'#3a86ff',KGS:'#2a9d8f',ESI:'#9b5de5',MU:'#1f6fc4',AGX:'#2a9d8f',VRT:'#e9a23b',TRGP:'#e76f51',AVGO:'#c1121f',ANET:'#457b9d'};
+function logo(tk){const c=LOGOS[tk]||'#5b6b86';return `<span class="logo" style="background:linear-gradient(135deg,${c},${c}cc)">${tk.slice(0,2)}</span>`;}
+function rsHtml(v){return `<span class="rs${v>=85?' hi':''}">RS ${v}</span>`;}
+function fmt(v,signed){if(v===null||v===undefined)return null;const r=Math.round(v*10)/10;return signed?((r<0?'−':'+')+Math.abs(r)+'%'):(r+'%');}
+
+const PRESETS={
+  sector_leader:{name:'セクター別リーダー',
+    gold:'セクター内 RS 首位圏（≥95）かつ ROE 高位 → 別格',
+    groups:[
+      {label:'収益の質', glass:true, cols:[{k:'ocf',h:'CF創出力'},{k:'roe',h:'ROE'}]},
+      {label:'', cols:[{k:'inst',h:'機関',signed:true}]},
+      {label:'現金利益質', glass:true, proposed:true, cols:[{k:'cfps',h:'CFPS>EPS',signed:true}]},
+    ],
+    rows:[
+      {tk:'KNTK',nm:'Kinetik Holdings',rsv:99,win:true,chips:['セクター内トップ'],ocf:36.1,roe:31.0,inst:20.4,cfps:28},
+      {tk:'BE',nm:'Bloom Energy',rsv:97,chips:['セクター内トップ'],ocf:12.3,roe:0.8,inst:21.7,cfps:9},
+      {tk:'UMC',nm:'United Microelectronics',rsv:97,chips:['セクター内トップ'],ocf:25.0,roe:13.5,inst:17.7,cfps:null},
+      {tk:'KGS',nm:'Kodiak Gas Services',rsv:93,chips:['セクター内トップ'],ocf:42.0,roe:5.5,inst:15.4,cfps:15},
+      {tk:'ESI',nm:'Element Solutions',rsv:90,chips:['セクター内トップ'],ocf:7.1,roe:5.6,inst:14.7,cfps:4},
+    ]},
+  earnings_pass:{name:'決算合格',
+    gold:'決算「三拍子」達成（売上・EPS とも予想超 ＋ 利益の質）→ 別格【現行 v12 is-win と同等】',
+    groups:[
+      {label:'成長', cols:[{k:'rev',h:'売上YoY',signed:true},{k:'eps',h:'EPS YoY',signed:true}]},
+      {label:'収益の質', glass:true, cols:[{k:'gm',h:'粗利率'},{k:'fcf',h:'FCF率'}]},
+      {label:'現金利益質', glass:true, proposed:true, cols:[{k:'cfps',h:'CFPS>EPS',signed:true}]},
+    ],
+    rows:[
+      {tk:'MU',nm:'Micron Technology',rsv:99,win:true,chips:['5条件達成','EPS↑'],rev:346,eps:1000,gm:85,fcf:29,cfps:34},
+      {tk:'AGX',nm:'Argan, Inc.',rsv:95,win:true,chips:['5条件達成','EPS↑'],rev:33,eps:64,gm:18,fcf:47,cfps:22},
+      {tk:'VRT',nm:'Vertiv Holdings',rsv:91,chips:['5条件達成','EPS↑'],rev:24,eps:42,gm:42,fcf:24,cfps:11},
+      {tk:'TRGP',nm:'Targa Resources',rsv:83,chips:['5条件達成','EPS↑'],rev:18,eps:30,gm:74,fcf:23,cfps:9},
+    ]},
+  new_high_break:{name:'新高値ブレイク',
+    gold:'実ブレイク確定 ＋ 出来高急増（+50%超）→ 別格',
+    groups:[
+      {label:'勢い', cols:[{k:'vol',h:'出来高',signed:true},{k:'eps',h:'EPS YoY',signed:true}]},
+      {label:'業種ローテ', glass:true, proposed:true, cols:[{k:'grp',h:'業種RS'}]},
+    ],
+    rows:[
+      {tk:'AVGO',nm:'Broadcom',rsv:88,win:true,chips:['実ブレイク','決算ビート'],vol:62,eps:40,grp:92},
+      {tk:'ANET',nm:'Arista Networks',rsv:91,chips:['高値圏','決算ビート'],vol:48,eps:35,grp:88},
+    ]},
+};
+
+let cur='sector_leader';
+function flatCols(p){const out=[];p.groups.forEach(g=>g.cols.forEach((c,i)=>out.push({...c,glass:!!g.glass,gstart:!!g.glass&&i===0})));return out;}
+function gridTemplate(p){return `minmax(0,1.4fr) ${flatCols(p).map(()=>'84px').join(' ')}`;}
+
+function render(){
+  const p=PRESETS[cur];
+  const cols=flatCols(p);
+  document.getElementById('ptitle').textContent=p.name+' — 結果';
+  document.getElementById('pcount').textContent=p.rows.length;
+  const tmpl=gridTemplate(p);
+
+  const gh=document.getElementById('ghead');
+  gh.style.gridTemplateColumns=tmpl;
+  let ghHtml='<span></span>';
+  p.groups.forEach(g=>{
+    const cls=['gzlabel',g.glass?'is-glass':'',g.proposed?'is-proposed':''].filter(Boolean).join(' ');
+    const label=g.label?(g.label+(g.proposed?'<span class="badge">提案</span>':'')):'';
+    ghHtml+=`<span class="${cls}" style="grid-column:span ${g.cols.length}">${label}</span>`;
+  });
+  gh.innerHTML=ghHtml;
+
+  const lh=document.getElementById('lhead');
+  lh.style.gridTemplateColumns=tmpl;
+  lh.innerHTML='<span>銘柄</span>'+cols.map(c=>`<span class="h-num${c.glass?' is-glass':''}">${c.h}</span>`).join('');
+
+  document.getElementById('rows').innerHTML=p.rows.map((r,i)=>{
+    const cells=cols.map(c=>{
+      const raw=fmt(r[c.k],c.signed);
+      const inner=raw===null?'<span class="num empty">—</span>':`<span class="num${c.glass?' glass':''}">${raw}</span>`;
+      return `<span class="cell${c.glass?' is-glass':''}${c.gstart?' gstart':''}">${inner}</span>`;
+    }).join('');
+    const winpip=r.win?'<span class="winpip" title="この戦略の別格">★</span>':'';
+    const chips=r.chips.map((c,j)=>`<span class="chip${r.win&&j===0?' gold':''}">${c}</span>`).join('');
+    return `<div class="row${r.win?' win':''}" style="grid-template-columns:${tmpl};animation-delay:${i*45}ms">
+      <span class="cell tkcell"><span class="tk">${logo(r.tk)}<span class="tkbody">
+        <span class="tkline"><span class="tkr">${r.tk}</span>${winpip}${rsHtml(r.rsv)}</span>
+        <span class="subline">${chips}<span class="nm">${r.nm}</span></span>
+      </span></span></span>${cells}</div>`;
+  }).join('');
+
+  [...document.querySelectorAll('#seg button')].forEach(b=>b.classList.toggle('on',b.dataset.k===cur));
+  document.getElementById('note').innerHTML=
+    `<b>① ゴールド標榜の criteria（${p.name}）:</b> <span class="gd">${p.gold}</span><br>`
+    +`<b>② ガラスゾーン:</b> 来期ガイダンス以外で「分類が違う」指標群（収益の質／業種ローテ 等）を同じガラス背景で仕切り、視線でカテゴリを即把握（数値は中立色のまま＝§38）。決算合格は既存の来期2列ガラスに加えこの収益の質ゾーンを追加。<br>`
+    +`<b>提案（KB由来・未搭載）:</b> 現金利益質（CFPS&gt;EPS・trading.md:786）／業種グループRS（同:3944）等、KB にあるが screener 未搭載の指標をガラス列で追加検討。<span class="gd">backend data 追加が前提＝別タスク</span>。`;
+}
+const seg=document.getElementById('seg');
+seg.innerHTML=Object.entries(PRESETS).map(([k,p])=>`<button data-k="${k}">${p.name}</button>`).join('');
+seg.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;cur=b.dataset.k;render();});
+render();
+</script>
+</body>
+</html>

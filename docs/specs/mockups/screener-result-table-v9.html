@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BeatScanner スクリーナー結果テーブル v9（見出し行＋値列）</title>
+<style>
+  :root{
+    --bg-primary:#0f172a; --bg-card:#1e2433; --bg-subtle:#1e2a3a; --bg-muted:#243447; --bg-hover:#253045;
+    --text-primary:#f1f5f9; --text-secondary:#cbd5e1; --text-muted:#94a3b8;
+    --color-gain:#34ef81; --color-loss:#f87171; --color-warning:#f59e0b; --color-accent:#38bdf8;
+    --gold:#d4af37; --gold-mid:#f4cd5d;
+    --border:rgba(255,255,255,.08); --border-strong:rgba(255,255,255,.14);
+    --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;--s6:24px;--s8:32px;
+    --r-sm:8px;--r-md:12px;--r-lg:16px;--r-pill:9999px;
+    --font:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:radial-gradient(1200px 600px at 80% -10%,rgba(56,189,248,.05),transparent 60%),var(--bg-primary);
+    color:var(--text-primary);font-family:var(--font);-webkit-font-smoothing:antialiased;line-height:1.5;padding:var(--s8) var(--s6) 64px}
+  .wrap{max-width:760px;margin:0 auto}
+  .mock-tag{display:inline-block;font-size:11px;letter-spacing:.04em;color:var(--gold-mid);border:1px solid rgba(212,175,55,.35);border-radius:var(--r-pill);padding:3px 10px;margin-bottom:var(--s3)}
+  h1{font-size:20px;font-weight:600;letter-spacing:-.01em;margin-bottom:var(--s2)}
+  .sub{color:var(--text-muted);font-size:13px;margin-bottom:var(--s5)}
+  .note{color:var(--text-muted);font-size:12px;margin-top:var(--s4);line-height:1.7}
+  .note b{color:var(--text-secondary)}
+
+  /* preset 切替 */
+  .seg{display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-pill);padding:3px;margin-bottom:var(--s4);flex-wrap:wrap}
+  .seg button{border:0;background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;padding:6px 14px;border-radius:var(--r-pill);cursor:pointer;transition:.2s}
+  .seg button.on{background:var(--bg-muted);color:var(--text-primary)}
+
+  /* パネル */
+  .panel{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden}
+  .ph{display:flex;align-items:center;justify-content:space-between;padding:var(--s3) var(--s4);border-bottom:1px solid var(--border)}
+  .ph h2{font-size:14px;font-weight:600}
+  .ph .live{font-size:12px;color:var(--text-secondary)}
+  .ph .live b{color:var(--gold-mid);font-variant-numeric:tabular-nums}
+
+  /* ── 見出し行（列ラベルを 1 回だけ・sticky・preset で動的） ── */
+  .list{max-height:420px;overflow:auto}
+  .lhead{position:sticky;top:0;z-index:2;display:grid;align-items:center;
+    gap:var(--s3);padding:var(--s2) var(--s4);
+    background:var(--bg-subtle);border-bottom:1px solid var(--border);
+    font-size:11px;font-weight:600;letter-spacing:.03em;color:var(--text-muted)}
+  .lhead .h-num{text-align:right;font-variant-numeric:tabular-nums}
+
+  /* ── データ行（値のみ・列整列） ── */
+  .row{display:grid;align-items:center;gap:var(--s3);padding:var(--s2) var(--s4);
+    border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;position:relative}
+  .row:last-child{border-bottom:0}
+  .row:hover{background:var(--bg-hover)}
+  .row.sel{background:rgba(212,175,55,.06)}
+  .row.sel::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--gold)}
+
+  /* 銘柄セル（col 1）: ロゴ + ティッカー + RS + チップ + 会社名 */
+  .tk{display:flex;align-items:center;gap:var(--s2);min-width:0}
+  .logo{width:26px;height:26px;border-radius:var(--r-pill);flex:none;display:grid;place-items:center;
+    font-size:10px;font-weight:700;color:#0b1220;font-family:var(--mono)}
+  .tkbody{min-width:0;display:flex;flex-direction:column;gap:2px}
+  .tkline{display:flex;align-items:baseline;gap:var(--s2);min-width:0}
+  .tkr{font-family:var(--mono);font-weight:600;font-size:14px;color:var(--text-primary)}
+  .rs{font-family:var(--mono);font-size:12px;color:var(--text-secondary);font-variant-numeric:tabular-nums}
+  .rs.hi{color:var(--text-primary);font-weight:600}
+  .subline{display:flex;align-items:center;gap:var(--s2);min-width:0}
+  .chip{display:inline-flex;align-items:center;font-size:10.5px;font-weight:600;color:var(--text-secondary);
+    background:var(--bg-muted);border:1px solid var(--border);border-radius:var(--r-pill);padding:1px 7px;white-space:nowrap}
+  .nm{font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+
+  /* 数値セル: 右寄せ・tabular-nums・§38 中立色（緑/赤 polarity なし） */
+  .num{text-align:right;font-family:var(--mono);font-weight:600;font-size:12.5px;color:var(--text-secondary);
+    font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+  .num.empty{color:var(--text-muted);font-weight:400}
+
+  .legend{display:flex;gap:var(--s4);flex-wrap:wrap;margin-top:var(--s3);font-size:11px;color:var(--text-muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="mock-tag">MOCKUP v9 · 結果テーブル（見出し行＋値列）</span>
+  <h1>スクリーナー結果リスト — 「文字壁」解消案</h1>
+  <p class="sub">列ラベルを <b style="color:var(--text-secondary)">見出し行に 1 回だけ</b> 出し、各行は値のみを列整列。欠損は「—」で桁を揃える。Excel 型・preset で列が動的に変わる。</p>
+
+  <div class="seg" id="seg"></div>
+
+  <div class="panel">
+    <div class="ph"><h2 id="ptitle">結果</h2><span class="live">該当 <b id="pcount">–</b> 銘柄</span></div>
+    <div class="list">
+      <div class="lhead" id="lhead"></div>
+      <div id="rows"></div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span>§38: 数値は中立色（緑/赤の断定なし）</span>
+    <span>RS は自己ラベル（「RS 83」）で銘柄セル内</span>
+    <span>EPS は数値化せずチップ（ADR 偽値防止）</span>
+  </div>
+
+  <p class="note" id="note"></p>
+</div>
+
+<script>
+const LOGOS = {TRGP:'#e76f51',AGX:'#2a9d8f',VRT:'#e9a23b',FTI:'#6d6af3',DFTX:'#ef476f',BE:'#118ab2',KNTK:'#06d6a0',UMC:'#3a86ff',KGS:'#2a9d8f',EE:'#8ecae6',ESI:'#9b5de5',AVGO:'#c1121f',ANET:'#457b9d'};
+function logo(tk){const c=LOGOS[tk]||'#5b6b86';return `<span class="logo" style="background:linear-gradient(135deg,${c},${c}cc)">${tk.slice(0,2)}</span>`;}
+function rs(v){return `<span class="rs${v>=85?' hi':''}">RS ${v}</span>`;}
+function num(v,signed){ if(v===null||v===undefined) return '<span class="num empty">—</span>';
+  const r=Math.round(v*10)/10; const t=signed?((r<0?'−':'+')+Math.abs(r)):(''+r); return `<span class="num">${t}%</span>`; }
+
+// preset 定義: cols=[銘柄見出しは固定, ...数値列], data 行
+const PRESETS = {
+  earnings_pass:{ name:'決算合格', cols:[{k:'roe',h:'ROE'},{k:'ocf',h:'CF創出力'}],
+    rows:[
+      {tk:'TRGP',nm:'Targa Resources',rsv:83,chips:['5条件達成','EPS↑'],roe:73.9,ocf:22.6,sel:true},
+      {tk:'AGX',nm:'Argan, Inc.',rsv:95,chips:['5条件達成','EPS↑'],roe:36.9,ocf:47.3},
+      {tk:'VRT',nm:'Vertiv Holdings',rsv:91,chips:['5条件達成','EPS↑'],roe:42.1,ocf:24.0},
+      {tk:'FTI',nm:'TechnipFMC plc',rsv:82,chips:['5条件達成','EPS↑'],roe:32.5,ocf:16.3},
+    ]},
+  sector_leader:{ name:'セクター別リーダー', cols:[{k:'roe',h:'ROE'},{k:'ocf',h:'CF創出力'},{k:'inst',h:'機関',signed:true}],
+    rows:[
+      {tk:'DFTX',nm:'Definium Therapeutics',rsv:97,chips:['セクター内トップ'],roe:-102.5,ocf:null,inst:null,sel:true},
+      {tk:'BE',nm:'Bloom Energy',rsv:97,chips:['セクター内トップ'],roe:0.8,ocf:12.3,inst:21.7},
+      {tk:'KNTK',nm:'Kinetik Holdings',rsv:99,chips:['セクター内トップ'],roe:null,ocf:36.1,inst:20.4},
+      {tk:'UMC',nm:'United Microelectronics',rsv:97,chips:['セクター内トップ'],roe:13.5,ocf:null,inst:17.7},
+      {tk:'KGS',nm:'Kodiak Gas Services',rsv:93,chips:['セクター内トップ'],roe:5.5,ocf:42.0,inst:15.4},
+      {tk:'EE',nm:'Excelerate Energy',rsv:79,chips:['セクター内トップ'],roe:null,ocf:null,inst:15.5},
+      {tk:'ESI',nm:'Element Solutions',rsv:90,chips:['セクター内トップ'],roe:5.6,ocf:7.1,inst:14.7},
+    ]},
+  new_high_break:{ name:'新高値ブレイク', cols:[{k:'vol',h:'出来高',signed:true}],
+    rows:[
+      {tk:'AVGO',nm:'Broadcom',rsv:88,chips:['決算ビート','EPS↑'],vol:62,sel:true},
+      {tk:'ANET',nm:'Arista Networks',rsv:91,chips:['決算ビート','EPS↑'],vol:48},
+    ]},
+};
+
+let cur='earnings_pass';
+function gridCols(p){ // 銘柄(1fr) + 各数値列 76px
+  return `minmax(0,1fr) ${p.cols.map(()=>'76px').join(' ')}`;
+}
+function render(){
+  const p=PRESETS[cur];
+  document.getElementById('ptitle').textContent=p.name+' — 結果';
+  document.getElementById('pcount').textContent=p.rows.length;
+  // 見出し行
+  const lh=document.getElementById('lhead');
+  lh.style.gridTemplateColumns=gridCols(p);
+  lh.innerHTML=`<span>銘柄</span>`+p.cols.map(c=>`<span class="h-num">${c.h}</span>`).join('');
+  // データ行
+  document.getElementById('rows').innerHTML=p.rows.map(r=>{
+    const cells=p.cols.map(c=>num(r[c.k],c.signed)).join('');
+    return `<div class="row${r.sel?' sel':''}" style="grid-template-columns:${gridCols(p)}">
+      <span class="tk">${logo(r.tk)}<span class="tkbody">
+        <span class="tkline"><span class="tkr">${r.tk}</span>${rs(r.rsv)}</span>
+        <span class="subline">${r.chips.map(c=>`<span class="chip">${c}</span>`).join('')}<span class="nm">${r.nm}</span></span>
+      </span></span>${cells}</div>`;
+  }).join('');
+  // seg active
+  [...document.querySelectorAll('#seg button')].forEach(b=>b.classList.toggle('on',b.dataset.k===cur));
+  document.getElementById('note').innerHTML =
+    cur==='sector_leader'
+      ? '<b>欠損は「—」で整列</b>：KNTK は ROE 欠損、EE は ROE/CF 欠損でも列が崩れず、見出しがあるので「この列のデータなし」と即読める（現状のラベル繰り返し＝文字壁を解消）。DFTX の機関は異常外れ値（+3150%）のため非表示。'
+      : '<b>列見出しは 1 回だけ</b>：各行は値のみで縦スキャン可能。RS は自己ラベルで銘柄セル内、EPS は ADR 偽値防止のため数値化せずチップ表示。';
+}
+const seg=document.getElementById('seg');
+seg.innerHTML=Object.entries(PRESETS).map(([k,p])=>`<button data-k="${k}">${p.name}</button>`).join('');
+seg.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;cur=b.dataset.k;render();});
+render();
+</script>
+</body>
+</html>

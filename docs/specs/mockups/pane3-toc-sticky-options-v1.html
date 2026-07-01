@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pane3 TOC 常時表示 3案比較（scroll-spy 実動）v1</title>
+<style>
+  :root{
+    --bg-primary:#0f172a; --bg-subtle:#1e2a3a; --bg-muted:#243447; --bg-pane:#0d1626;
+    --border:#334155; --border-strong:rgba(255,255,255,.14);
+    --text-primary:#f1f5f9; --text-secondary:#cbd5e1; --text-muted:#94a3b8;
+    --color-gold:#d4af37; --color-gold-dark:#c8952c; --color-accent:#38bdf8;
+    --radius-pill:9999px; --radius-lg:16px; --radius-md:12px; --radius-sm:8px;
+  }
+  *{box-sizing:border-box;}
+  body{background:#070d18;color:var(--text-primary);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;margin:0;padding:32px 36px 64px;line-height:1.6;}
+  h1{font-size:20px;font-weight:700;margin:0 0 4px;}
+  .sub{color:var(--text-muted);font-size:13px;margin:0 0 28px;max-width:900px;}
+  .sub b{color:var(--text-secondary);}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+  @media(max-width:1100px){.grid{grid-template-columns:1fr;max-width:560px;}}
+
+  .col h2{font-size:14px;font-weight:700;margin:0 0 2px;}
+  .col .desc{font-size:11.5px;color:var(--text-muted);margin:0 0 10px;min-height:48px;}
+  .col .desc b{color:var(--color-gold-dark);}
+
+  /* 疑似 Pane3 (スクロール領域) */
+  .frame{position:relative;height:540px;overflow-y:auto;background:var(--bg-pane);border:1px solid var(--border);border-radius:var(--radius-md);scroll-behavior:smooth;}
+  .frame::-webkit-scrollbar{width:8px;} .frame::-webkit-scrollbar-thumb{background:var(--border);border-radius:8px;}
+
+  .hero{padding:16px 16px 12px;}
+  .hero .tk{font-size:22px;font-weight:800;letter-spacing:-.02em;}
+  .hero .nm{font-size:11px;color:var(--text-muted);}
+
+  /* 章 */
+  .chapter-h{display:flex;align-items:center;gap:8px;margin:0 0 10px;padding:0 16px;}
+  .no{width:22px;height:22px;flex-shrink:0;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;color:var(--color-gold);background:color-mix(in srgb,var(--color-gold) 12%,transparent);border:1px solid color-mix(in srgb,var(--color-gold) 30%,transparent);}
+  .chapter-h .ti{font-size:15px;font-weight:700;}
+  .panel{margin:0 16px 16px;border:1px solid var(--border);border-top:2px solid color-mix(in srgb,var(--color-gold) 30%,var(--border));border-radius:var(--radius-lg);padding:16px;background:transparent;}
+  .panel p{margin:0 0 8px;font-size:12px;color:var(--text-secondary);} .panel .ph{height:8px;background:var(--bg-subtle);border-radius:4px;margin:6px 0;} .panel .ph.s{width:60%;}
+  .sec{scroll-margin-top:64px;}
+
+  /* ===== 共通 chip ===== */
+  .chip{color:var(--text-secondary);border:1px solid var(--border);border-radius:var(--radius-pill);padding:3px 10px;background:var(--bg-subtle);cursor:pointer;font-size:11.5px;transition:.15s;text-decoration:none;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;}
+  .chip:hover{border-color:var(--border-strong);color:var(--text-primary);}
+  .cnum{display:inline-grid;place-items:center;width:15px;height:15px;border-radius:50%;font-size:9px;font-weight:700;color:var(--color-gold);background:color-mix(in srgb,var(--color-gold) 12%,transparent);border:1px solid color-mix(in srgb,var(--color-gold) 30%,transparent);}
+  /* active: 文字は text-primary（AA 確保）、gold は border/bg のみ */
+  .chip.active{color:var(--text-primary);border-color:color-mix(in srgb,var(--color-gold) 55%,transparent);background:color-mix(in srgb,var(--color-gold) 16%,transparent);font-weight:700;}
+  .chip.active .cnum{color:var(--color-gold);background:color-mix(in srgb,var(--color-gold) 22%,transparent);}
+
+  /* ===== A: sticky 上部バー ===== */
+  .toc-sticky{position:sticky;top:0;z-index:5;display:flex;gap:5px;flex-wrap:wrap;align-items:center;padding:9px 16px;background:color-mix(in srgb,var(--bg-pane) 92%,black);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);}
+
+  /* ===== B: floating 縦ミニレール ===== */
+  .frameB-wrap{position:relative;}
+  .rail{position:absolute;top:14px;right:10px;z-index:5;display:flex;flex-direction:column;gap:9px;}
+  .rdot{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;cursor:pointer;color:var(--text-muted);background:color-mix(in srgb,var(--bg-subtle) 70%,transparent);border:1px solid var(--border);transition:.2s;position:relative;}
+  .rdot:hover{color:var(--text-secondary);border-color:var(--border-strong);}
+  .rdot.active{color:var(--color-gold);background:color-mix(in srgb,var(--color-gold) 18%,transparent);border-color:color-mix(in srgb,var(--color-gold) 55%,transparent);box-shadow:0 0 0 3px color-mix(in srgb,var(--color-gold) 10%,transparent);transform:scale(1.06);}
+  /* tooltip */
+  .rdot .tip{position:absolute;right:30px;top:50%;transform:translateY(-50%);white-space:nowrap;font-size:11px;font-weight:600;color:var(--text-primary);background:var(--bg-muted);border:1px solid var(--border);border-radius:6px;padding:3px 9px;opacity:0;pointer-events:none;transition:opacity .15s;}
+  .rdot:hover .tip,.rdot.active .tip{opacity:1;}
+  .frameB .hero,.frameB .chapter-h,.frameB .panel{margin-right:46px;} .frameB .hero{padding-right:46px;}
+
+  /* ===== C: 静的（上部・スクロールで消える） ===== */
+  .toc-static{display:flex;gap:5px;flex-wrap:wrap;align-items:center;padding:9px 16px 12px;}
+
+  .legend{font-size:11px;color:var(--text-muted);margin-top:8px;} .legend.good{color:#7dd3a8;} .legend.warn{color:#e0b057;}
+  .recommend{display:inline-block;font-size:10px;font-weight:700;color:var(--color-gold-dark);border:1px solid color-mix(in srgb,var(--color-gold) 40%,transparent);background:color-mix(in srgb,var(--color-gold) 10%,transparent);border-radius:var(--radius-sm);padding:1px 7px;margin-left:6px;vertical-align:middle;}
+</style>
+</head>
+<body>
+  <h1>Pane3 TOC「常時表示」3案 — scroll-spy 実動比較 v1</h1>
+  <p class="sub">各パネルは<b>実際にスクロールできます</b>。スクロールして「現在地ハイライトが見えるか / 目次と分かるか」を体感してください。<br>
+  指摘の通り、<b>C（静的）はスクロールすると目次が消えてハイライトが見えません</b>。A・B は常時表示で現在地が追えます。</p>
+
+  <div class="grid">
+    <!-- ===== A ===== -->
+    <div class="col">
+      <h2>A. sticky 上部バー<span class="recommend">推奨</span></h2>
+      <p class="desc">番号付き chip バーが<b>上端に貼り付き常時可視</b>。スクロールで現在地 chip が gold ハイライト。横並び維持・どの幅でも収まる。</p>
+      <div class="frame" id="frameA">
+        <div class="hero"><div class="tk">ASTS</div><div class="nm">AST SpaceMobile, Inc. · FY2025</div></div>
+        <nav class="toc-sticky" id="tocA">
+          <a class="chip" data-t="A1"><span class="cnum">1</span>決算</a>
+          <a class="chip" data-t="A2"><span class="cnum">2</span>品質</a>
+          <a class="chip" data-t="A3"><span class="cnum">3</span>テクニカル</a>
+          <a class="chip" data-t="A4"><span class="cnum">4</span>図解</a>
+          <a class="chip" data-t="A5"><span class="cnum">5</span>その他</a>
+        </nav>
+        <div id="A1" class="sec"><div class="chapter-h"><span class="no">1</span><span class="ti">決算</span></div><div class="panel"><p>決算3点 — 対コンセンサス</p><div class="ph"></div><div class="ph s"></div><div class="ph"></div><p>成長トレンド（直近8Q）</p><div class="ph"></div></div></div>
+        <div id="A2" class="sec"><div class="chapter-h"><span class="no">2</span><span class="ti">品質・継続性</span></div><div class="panel"><p>営業CFマージン 19.8%</p><div class="ph"></div><div class="ph s"></div><p>ROE / PER / PEG</p><div class="ph"></div></div></div>
+        <div id="A3" class="sec"><div class="chapter-h"><span class="no">3</span><span class="ti">テクニカル・買い場</span></div><div class="panel"><p>価格目安（PriceLadder）</p><div class="ph"></div><div class="ph"></div><div class="ph s"></div></div></div>
+        <div id="A4" class="sec"><div class="chapter-h"><span class="no">4</span><span class="ti">図解で理解する</span></div><div class="panel"><p>図解 Pro</p><div class="ph"></div><div class="ph s"></div></div></div>
+        <div id="A5" class="sec"><div class="chapter-h"><span class="no">5</span><span class="ti">その他</span></div><div class="panel"><p>アナリスト視点 / 市場の声</p><div class="ph"></div><div class="ph"></div></div></div>
+      </div>
+      <p class="legend good">○ スクロール中も常時可視・現在地が追える　○ 横並び維持・幅自由　△ 検索バーと z-index 調整</p>
+    </div>
+
+    <!-- ===== B ===== -->
+    <div class="col">
+      <h2>B. floating 縦ミニレール</h2>
+      <p class="desc">右端に<b>番号 gold バッジを縦に浮かせ常時表示</b>。現在地を強発光、hover で章名 tooltip。最もミニマル（docs 方式）。</p>
+      <div class="frame frameB" id="frameB">
+        <div class="frameB-wrap">
+          <nav class="rail" id="railB">
+            <span class="rdot" data-t="B1">1<span class="tip">決算</span></span>
+            <span class="rdot" data-t="B2">2<span class="tip">品質・継続性</span></span>
+            <span class="rdot" data-t="B3">3<span class="tip">テクニカル・買い場</span></span>
+            <span class="rdot" data-t="B4">4<span class="tip">図解</span></span>
+            <span class="rdot" data-t="B5">5<span class="tip">その他</span></span>
+          </nav>
+          <div class="hero"><div class="tk">ASTS</div><div class="nm">AST SpaceMobile, Inc. · FY2025</div></div>
+          <div id="B1" class="sec"><div class="chapter-h"><span class="no">1</span><span class="ti">決算</span></div><div class="panel"><p>決算3点 — 対コンセンサス</p><div class="ph"></div><div class="ph s"></div><div class="ph"></div><p>成長トレンド（直近8Q）</p><div class="ph"></div></div></div>
+          <div id="B2" class="sec"><div class="chapter-h"><span class="no">2</span><span class="ti">品質・継続性</span></div><div class="panel"><p>営業CFマージン 19.8%</p><div class="ph"></div><div class="ph s"></div><p>ROE / PER / PEG</p><div class="ph"></div></div></div>
+          <div id="B3" class="sec"><div class="chapter-h"><span class="no">3</span><span class="ti">テクニカル・買い場</span></div><div class="panel"><p>価格目安（PriceLadder）</p><div class="ph"></div><div class="ph"></div><div class="ph s"></div></div></div>
+          <div id="B4" class="sec"><div class="chapter-h"><span class="no">4</span><span class="ti">図解で理解する</span></div><div class="panel"><p>図解 Pro</p><div class="ph"></div><div class="ph s"></div></div></div>
+          <div id="B5" class="sec"><div class="chapter-h"><span class="no">5</span><span class="ti">その他</span></div><div class="panel"><p>アナリスト視点 / 市場の声</p><div class="ph"></div><div class="ph"></div></div></div>
+        </div>
+      </div>
+      <p class="legend good">○ 最小フットプリント・最もミニマル　○ 現在地が常時追える　△ tooltip 実装 + 端スペース必要・狭幅で窮屈</p>
+    </div>
+
+    <!-- ===== C ===== -->
+    <div class="col">
+      <h2>C. 案B 静的（scroll-spy 撤回）</h2>
+      <p class="desc">上部に<b>番号付き chip（静的）</b>。スクロールすると<b>目次が消える</b>＝現在地ハイライトは付けても見えない。最小・最も静か。</p>
+      <div class="frame" id="frameC">
+        <div class="hero"><div class="tk">ASTS</div><div class="nm">AST SpaceMobile, Inc. · FY2025</div></div>
+        <nav class="toc-static" id="tocC">
+          <a class="chip" data-t="C1"><span class="cnum">1</span>決算</a>
+          <a class="chip" data-t="C2"><span class="cnum">2</span>品質</a>
+          <a class="chip" data-t="C3"><span class="cnum">3</span>テクニカル</a>
+          <a class="chip" data-t="C4"><span class="cnum">4</span>図解</a>
+          <a class="chip" data-t="C5"><span class="cnum">5</span>その他</a>
+        </nav>
+        <div id="C1" class="sec"><div class="chapter-h"><span class="no">1</span><span class="ti">決算</span></div><div class="panel"><p>決算3点 — 対コンセンサス</p><div class="ph"></div><div class="ph s"></div><div class="ph"></div><p>成長トレンド（直近8Q）</p><div class="ph"></div></div></div>
+        <div id="C2" class="sec"><div class="chapter-h"><span class="no">2</span><span class="ti">品質・継続性</span></div><div class="panel"><p>営業CFマージン 19.8%</p><div class="ph"></div><div class="ph s"></div><p>ROE / PER / PEG</p><div class="ph"></div></div></div>
+        <div id="C3" class="sec"><div class="chapter-h"><span class="no">3</span><span class="ti">テクニカル・買い場</span></div><div class="panel"><p>価格目安（PriceLadder）</p><div class="ph"></div><div class="ph"></div><div class="ph s"></div></div></div>
+        <div id="C4" class="sec"><div class="chapter-h"><span class="no">4</span><span class="ti">図解で理解する</span></div><div class="panel"><p>図解 Pro</p><div class="ph"></div><div class="ph s"></div></div></div>
+        <div id="C5" class="sec"><div class="chapter-h"><span class="no">5</span><span class="ti">その他</span></div><div class="panel"><p>アナリスト視点 / 市場の声</p><div class="ph"></div><div class="ph"></div></div></div>
+      </div>
+      <p class="legend warn">○ 最小・実装ゼロリスク　△ スクロールで目次消失＝「現在地」価値なし（クリックジャンプのみ）</p>
+    </div>
+  </div>
+
+<script>
+  // 各 frame 内で scroll-spy（IntersectionObserver, root=frame）。クリックで該当章へ smooth scroll。
+  function wire(frameId, navId, attrSel){
+    var frame=document.getElementById(frameId);
+    var nav=document.getElementById(navId);
+    var items=nav.querySelectorAll('['+attrSel+']');
+    // クリックジャンプ
+    items.forEach(function(it){
+      it.addEventListener('click',function(){
+        var id=it.getAttribute('data-t');
+        var t=document.getElementById(id);
+        if(t) frame.scrollTo({top:t.offsetTop-56,behavior:'smooth'});
+      });
+    });
+    var sections=frame.querySelectorAll('.sec');
+    var io=new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting){
+          var id=e.target.id;
+          items.forEach(function(it){ it.classList.toggle('active', it.getAttribute('data-t')===id); });
+        }
+      });
+    },{root:frame,rootMargin:'-15% 0px -70% 0px',threshold:0});
+    sections.forEach(function(s){io.observe(s);});
+    // 初期 active
+    items[0].classList.add('active');
+  }
+  wire('frameA','tocA','data-t');
+  wire('frameB','railB','data-t');
+  wire('frameC','tocC','data-t');
+</script>
+</body>
+</html>

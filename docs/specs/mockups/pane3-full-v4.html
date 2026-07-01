@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="dark">
+<head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>銘柄分析 Pane3 — 全体モックアップ v2 (KB反映・展開状態込)</title>
+<style>
+  :root{
+    --bg-primary:#0f172a;--bg-card:#1e2433;--bg-subtle:#1e2a3a;--bg-muted:#243447;--bg-hover:#253045;
+    --text-primary:#f1f5f9;--text-secondary:#cbd5e1;--text-muted:#94a3b8;--border:#334155;--border-strong:rgba(255,255,255,.14);
+    --gain:#34ef81;--loss:#f87171;--warning:#f59e0b;--accent:#38bdf8;--gold:#d4af37;--radius-sm:8px;--radius-md:12px;--radius-lg:16px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg-primary);color:var(--text-primary);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;font-feature-settings:"tnum";-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:900px;margin:0 auto;padding:22px 22px 80px;}
+  .legend{font-size:12px;color:var(--text-muted);margin:0 0 18px;padding:9px 13px;background:var(--bg-subtle);border:1px dashed var(--border);border-radius:var(--radius-sm);line-height:1.6;}
+  .legend b{color:var(--text-secondary);}
+  .tag{display:inline-block;font-size:10px;font-weight:700;border-radius:5px;padding:1px 6px;margin-right:3px;}
+  .tag.n{background:rgba(52,239,129,.16);color:var(--gain);} .tag.k{background:rgba(212,175,55,.16);color:var(--gold);}
+  .clickable{cursor:pointer;transition:background-color .15s,border-color .15s;}
+  .clickable:hover{background:var(--bg-hover);border-color:var(--border-strong);}
+  .clickable:hover .drill{color:var(--accent);}
+  .panel{background:var(--bg-card);border:1px solid var(--border);border-top:2px solid color-mix(in srgb,var(--gold) 30%,var(--border));border-radius:var(--radius-lg);padding:18px;margin-bottom:14px;}
+  .vh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;} .vh .t{font-size:15px;font-weight:600;}
+  .vh .frac{font-size:12.5px;color:var(--text-muted);display:flex;align-items:center;gap:6px;} .vh .frac::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--gain);}
+  .muted{color:var(--text-muted);} .small{font-size:11px;}
+
+  /* Hero */
+  .hero{background:var(--bg-card);border:1px solid var(--border);border-top:2px solid color-mix(in srgb,var(--gold) 30%,var(--border));border-radius:var(--radius-lg);padding:18px;margin-bottom:14px;display:flex;flex-direction:column;gap:12px;}
+  .hero .id{display:flex;align-items:center;gap:12px;}
+  .hero .logo{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#76b900,#5a8c00);display:grid;place-items:center;font-weight:800;color:#0b1220;font-size:15px;}
+  .hero .tkwrap{display:flex;align-items:center;gap:8px;} /* v2 fix: ティッカーとセクターchipを詰める */
+  .hero .tk{font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1;}
+  .hero .secpill{font-size:11px;color:var(--text-secondary);border:1px solid var(--border);border-radius:999px;padding:2px 9px;line-height:1;}
+  .hero .co{font-size:12px;color:var(--text-muted);margin-top:3px;}
+  .hero .right{margin-left:auto;text-align:right;} .hero .px{font-size:22px;font-weight:700;} .hero .chg{font-size:13px;color:var(--loss);font-weight:600;} .hero .chg .mini{color:var(--text-muted);font-weight:400;font-size:11px;margin-left:8px;}
+  .hero .row2{display:flex;align-items:center;gap:10px;} .hero .cdpill{font-size:11.5px;color:var(--warning);background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);border-radius:999px;padding:4px 11px;}
+  .hero .watch{margin-left:auto;font-size:12px;color:var(--text-secondary);border:1px solid var(--border);border-radius:999px;padding:5px 13px;background:transparent;}
+
+  /* 判定サマリー */
+  .callout{font-size:12.5px;color:var(--text-secondary);line-height:1.55;background:rgba(52,239,129,.08);border:1px solid rgba(52,239,129,.22);border-left:3px solid var(--gain);border-radius:var(--radius-sm);padding:9px 12px;margin-bottom:14px;}
+  .buckets{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .bucket{border:1px solid var(--border);border-radius:var(--radius-md);padding:12px 13px;background:var(--bg-subtle);position:relative;}
+  .bucket .lab{font-size:11.5px;color:var(--text-muted);display:flex;align-items:center;gap:5px;margin-bottom:6px;} .bucket .star{color:var(--gold);}
+  .bucket .big{font-size:20px;font-weight:600;color:var(--gain);} .bucket .big.neutral{color:var(--text-secondary);} .bucket .sub{font-size:11px;color:var(--text-muted);margin-top:3px;}
+  .bucket .drill{position:absolute;top:11px;right:12px;font-size:11px;color:var(--text-muted);transition:color .15s;}
+  .minis{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}
+  .mini{border:1px solid var(--border);border-radius:var(--radius-md);padding:11px 13px;background:var(--bg-subtle);display:flex;justify-content:space-between;align-items:center;}
+  .mini .lab{font-size:11.5px;color:var(--text-muted);} .mini .val{font-size:15px;font-weight:600;} .mini .val .unit{font-size:11px;color:var(--text-muted);font-weight:400;margin-left:4px;}
+  .rs-badge{display:inline-block;font-size:13px;font-weight:700;color:var(--bg-primary);background:var(--accent);border-radius:6px;padding:1px 8px;}
+  .src{font-size:10.5px;color:var(--text-muted);margin-top:11px;text-align:right;}
+
+  .nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;}
+  .nav .chip{font-size:12.5px;color:var(--text-secondary);border:1px solid var(--border);border-radius:999px;padding:6px 13px;background:transparent;}
+  .nav .chip.active{color:var(--text-primary);border-color:var(--border-strong);background:var(--bg-hover);}
+
+  .chapter-h{display:flex;align-items:center;gap:10px;margin:26px 0 12px;}
+  .chapter-h .no{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--gold);background:rgba(212,175,55,.12);border:1px solid rgba(212,175,55,.3);}
+  .chapter-h .ti{font-size:17px;font-weight:700;letter-spacing:-.01em;} .chapter-h .meta{margin-left:auto;font-size:12px;color:var(--text-muted);}
+
+  .three{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  .three .c .k{font-size:12px;color:var(--text-muted);margin-bottom:4px;} .three .c .v{font-size:22px;font-weight:600;color:var(--gain);} .three .c .v.neu{color:var(--text-secondary);} .three .c .e{font-size:11px;color:var(--text-muted);margin-top:2px;}
+  .subline{font-size:12px;color:var(--text-secondary);margin-top:14px;padding-top:12px;border-top:1px solid var(--border);} .subline b{color:var(--gain);}
+
+  /* 良い決算3点 連続 chip (KB核心) */
+  .goodq{display:flex;align-items:center;gap:10px;margin:14px 0 4px;padding:10px 13px;border:1px solid color-mix(in srgb,var(--gold) 26%,var(--border));border-radius:var(--radius-sm);background:linear-gradient(90deg,color-mix(in srgb,var(--gold) 8%,transparent),transparent);}
+  .goodq .lab{font-size:12.5px;color:var(--text-secondary);} .goodq b{color:var(--gold);} .goodq .hint{margin-left:auto;font-size:10.5px;color:var(--text-muted);}
+
+  /* 8Q spark + 3点 tooltip (WS2 + KB) */
+  .spark-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:6px;}
+  .spark-title{font-size:12px;color:var(--text-secondary);margin-bottom:10px;font-weight:500;}
+  .bars{display:flex;align-items:flex-end;gap:6px;height:108px;position:relative;}
+  .bcol{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;position:relative;}
+  .bcol .pct{font-size:9.5px;color:var(--text-muted);margin-bottom:3px;}
+  .bcol .bar{width:74%;border-radius:4px 4px 0 0;background:linear-gradient(180deg,var(--gain),rgba(52,239,129,.45));transition:filter .12s;}
+  .bcol.rev .bar{background:linear-gradient(180deg,var(--accent),rgba(56,189,248,.4));}
+  .bcol.bad .bar{background:linear-gradient(180deg,var(--loss),rgba(248,113,113,.4));} /* 悪い決算Q */
+  .bcol .qlab{font-size:9px;color:var(--text-muted);margin-top:5px;white-space:nowrap;}
+  .bcol .qdot{position:absolute;top:-2px;width:6px;height:6px;border-radius:50%;}
+  .bcol:hover .bar{filter:brightness(1.25);}
+  .bcol.latest .bar{filter:brightness(1.2) saturate(1.25);}
+  .bcol.latest .qlab{color:var(--accent);font-weight:700;}
+  .axisnote{font-size:10px;color:var(--text-muted);text-align:center;margin-top:10px;letter-spacing:.04em;}
+  .axisnote b{color:var(--text-secondary);}
+  .tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%) translateY(4px);width:232px;background:#0b1220;border:1px solid var(--border-strong);border-radius:var(--radius-md);box-shadow:0 12px 30px rgba(0,0,0,.55);padding:11px 12px;opacity:0;pointer-events:none;transition:opacity .14s,transform .14s;z-index:30;text-align:left;}
+  .bcol:hover .tip{opacity:1;transform:translateX(-50%) translateY(0);}
+  .tip .th{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .tip .th .q{font-size:12px;font-weight:600;} .tip .verdict{font-size:10px;font-weight:700;border-radius:5px;padding:2px 8px;}
+  .tip .verdict.good{background:rgba(52,239,129,.18);color:var(--gain);} .tip .verdict.bad{background:rgba(248,113,113,.18);color:var(--loss);}
+  .tip .three3 .r{display:flex;justify-content:space-between;align-items:center;font-size:11px;margin:4px 0;}
+  .tip .three3 .r .k{color:var(--text-muted);} .tip .three3 .bm{font-size:10px;font-weight:700;border-radius:4px;padding:1px 7px;}
+  .tip .three3 .bm.beat{background:rgba(52,239,129,.18);color:var(--gain);} .tip .three3 .bm.miss{background:rgba(248,113,113,.18);color:var(--loss);}
+  .tip .yoy{font-size:10.5px;color:var(--text-secondary);margin-top:6px;padding-top:6px;border-top:1px solid var(--border);}
+  .tip .free{margin-top:6px;font-size:9.5px;color:var(--text-muted);border-top:1px dashed var(--border);padding-top:5px;} .tip .lock{color:var(--gold);}
+
+  /* 5条件 (details 展開) */
+  .cond{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px;}
+  details.cli{border:1px solid var(--border);border-radius:var(--radius-sm);background:rgba(255,255,255,.015);overflow:hidden;}
+  details.cli[open]{background:var(--bg-subtle);}
+  details.cli>summary{display:flex;align-items:center;gap:11px;padding:11px 13px;cursor:pointer;list-style:none;}
+  details.cli>summary::-webkit-details-marker{display:none;}
+  details.cli>summary:hover{background:var(--bg-hover);}
+  .ic{width:18px;height:18px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;font-size:11px;font-weight:700;}
+  .ic.pass{background:rgba(52,239,129,.16);color:var(--gain);} .ic.fail{background:rgba(148,163,184,.16);color:var(--text-muted);}
+  .cname{font-size:13px;flex:1;} .cnum{font-size:13px;color:var(--text-secondary);margin-right:4px;}
+  .pill{font-size:11px;font-weight:600;border-radius:999px;padding:2px 9px;} .pill.up{background:rgba(52,239,129,.16);color:var(--gain);} .pill.dn{background:rgba(248,113,113,.16);color:var(--loss);}
+  .chev{color:var(--text-muted);font-size:12px;font-weight:700;transition:transform .15s;} details[open] .chev{transform:rotate(90deg);}
+  .cbody{padding:0 14px 14px 42px;font-size:12px;color:var(--text-secondary);line-height:1.6;}
+  .cbody .calc{font-family:ui-monospace,monospace;font-size:11.5px;background:var(--bg-muted);border:1px solid var(--border);border-radius:6px;padding:7px 10px;margin:8px 0;color:var(--text-primary);}
+  .cbody .why{margin:6px 0;} .cbody .why b{color:var(--text-primary);}
+  .cbody .hist{display:flex;align-items:flex-end;gap:5px;height:40px;margin:10px 0 4px;}
+  .cbody .hist .hb{flex:1;background:linear-gradient(180deg,var(--gain),rgba(52,239,129,.3));border-radius:2px 2px 0 0;min-height:4px;position:relative;cursor:pointer;}
+  .cbody .hist .hb:last-child{filter:brightness(1.25) saturate(1.3);}
+  .cbody .hist .hb:hover{filter:brightness(1.35);}
+  .cbody .hist .htip{position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#0b1220;border:1px solid var(--border-strong);border-radius:6px;padding:5px 9px;font-size:10px;color:var(--text-secondary);white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .12s;z-index:25;text-align:left;}
+  .cbody .hist .htip b{color:var(--text-primary);} .cbody .hist .hsub{color:var(--text-muted);font-size:9px;}
+  .cbody .hist .hb:hover .htip{opacity:1;}
+  .cbody .histlab{display:flex;justify-content:space-between;font-size:9.5px;color:var(--text-muted);}
+  .cbody .warn{color:var(--warning);background:rgba(245,158,11,.08);border-left:3px solid var(--warning);padding:6px 10px;border-radius:4px;margin-top:8px;}
+  .cbody .more{font-size:11px;color:var(--accent);margin-top:8px;}
+
+  /* §② cards */
+  .dv{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--text-secondary);line-height:1.5;background:linear-gradient(90deg,color-mix(in srgb,var(--gold) 8%,transparent),transparent);border:1px solid color-mix(in srgb,var(--gold) 22%,var(--border));border-left:3px solid var(--gold);border-radius:var(--radius-sm);padding:10px 13px;margin-bottom:16px;} .dv b{color:var(--text-primary);}
+  .grp-label{font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--gold);text-transform:uppercase;margin:18px 0 10px;} .grp-label .en{color:var(--text-muted);font-weight:500;letter-spacing:0;text-transform:none;font-size:11px;}
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:11px;}
+  .mc{border:1px solid var(--border);border-radius:var(--radius-md);padding:13px 14px;background:var(--bg-subtle);display:flex;flex-direction:column;gap:9px;position:relative;}
+  .mc.hist{cursor:pointer;transition:background-color .15s,border-color .15s;} .mc.hist:hover{background:var(--bg-hover);border-color:var(--border-strong);}
+  .mc .top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;} .mc .nm{font-size:12.5px;color:var(--text-secondary);font-weight:500;}
+  .mc .badge{font-size:10px;font-weight:600;border-radius:6px;padding:2px 7px;white-space:nowrap;}
+  .mc .badge.sc{background:rgba(56,189,248,.14);color:var(--accent);border:1px solid rgba(56,189,248,.3);} .mc .badge.kb{background:rgba(212,175,55,.14);color:var(--gold);border:1px solid rgba(212,175,55,.3);}
+  .mc .mid{display:flex;align-items:baseline;gap:8px;} .mc .val{font-size:21px;font-weight:600;}
+  .mc .chip{font-size:10.5px;font-weight:600;border-radius:999px;padding:2px 8px;} .mc .chip.ok{background:rgba(52,239,129,.16);color:var(--gain);} .mc .chip.warn{background:rgba(245,158,11,.16);color:var(--warning);} .mc .chip.neu{background:rgba(148,163,184,.16);color:var(--text-muted);}
+  .mc .ctx{font-size:11px;color:var(--text-muted);line-height:1.45;}
+  .sp2{display:flex;flex:1;min-width:0;align-items:flex-end;gap:3px;height:30px;position:relative;} .sp2 .sb{flex:1;border-radius:2px 2px 0 0;background:linear-gradient(180deg,var(--gain),rgba(52,239,129,.35));min-height:3px;position:relative;}
+  .sp2 .sb:hover{filter:brightness(1.3);}
+  .sp2 .sb:last-child{filter:brightness(1.2) saturate(1.35);} .sp2.acc .sb{background:linear-gradient(180deg,var(--accent),rgba(56,189,248,.35));}
+  .sp2 .sbt{position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#0b1220;border:1px solid var(--border-strong);border-radius:6px;padding:3px 7px;font-size:10px;color:var(--text-primary);white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .12s;z-index:20;}
+  .sp2 .sb:hover .sbt{opacity:1;}
+  .sprow{display:flex;align-items:flex-end;justify-content:space-between;} .spcap{font-size:9.5px;color:var(--text-muted);margin-left:8px;align-self:flex-end;}
+  .strip{display:flex;flex-wrap:wrap;gap:8px;margin-top:11px;} .pillbox{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--text-secondary);border:1px solid var(--border);border-radius:999px;padding:5px 12px;background:var(--bg-subtle);} .pillbox .dot{width:7px;height:7px;border-radius:50%;background:var(--gain);} .pillbox b{color:var(--text-primary);}
+  .keep{font-size:11.5px;color:var(--text-muted);margin-top:14px;padding-top:12px;border-top:1px solid var(--border);} .keep b{color:var(--text-secondary);}
+
+  /* ③ chart */
+  .ctop{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+  .cchip{font-size:11px;border-radius:6px;padding:3px 9px;border:1px solid var(--border);color:var(--text-secondary);}
+  .cchip.px{font-weight:700;color:var(--text-primary);border-color:var(--border-strong);} .cchip.cup{color:var(--warning);border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.1);}
+  .cchip.gc{color:var(--gain);border-color:rgba(52,239,129,.4);} .cchip.rs{color:var(--accent);border-color:rgba(56,189,248,.4);}
+  .ctools{margin-left:auto;display:flex;gap:5px;align-items:center;} .ctools .tg{font-size:11px;border:1px solid var(--border);border-radius:6px;padding:3px 8px;color:var(--text-secondary);}
+  .periods{display:flex;gap:4px;} .periods .p{font-size:11px;color:var(--text-secondary);border:1px solid var(--border);border-radius:6px;padding:3px 8px;} .periods .p.on{background:var(--accent);color:var(--bg-primary);border-color:var(--accent);font-weight:600;}
+  .chartbox{position:relative;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-subtle);padding:12px 14px;}
+  .rlabels{position:absolute;right:8px;top:14px;display:flex;flex-direction:column;gap:6px;font-size:9px;}
+  .rlabels span{padding:1px 5px;border-radius:4px;background:rgba(0,0,0,.4);}
+  .ind{display:flex;gap:14px;margin-top:10px;font-size:11px;color:var(--text-muted);flex-wrap:wrap;} .ind .i{display:flex;align-items:center;gap:6px;} .ind .sw{width:14px;height:3px;border-radius:2px;}
+  /* PriceLadder */
+  .ladder{margin-top:14px;border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;}
+  .ladder .lh{font-size:11px;color:var(--gold);font-weight:600;padding:8px 12px;background:var(--bg-muted);display:flex;justify-content:space-between;}
+  .lrow{display:flex;justify-content:space-between;align-items:center;padding:7px 12px;font-size:11.5px;border-top:1px solid var(--border);}
+  .lrow .lk{color:var(--text-secondary);} .lrow .lv{font-variant-numeric:tabular-nums;color:var(--text-primary);}
+  .lrow.cur{background:rgba(56,189,248,.1);} .lrow.cur .lk{color:var(--accent);font-weight:600;} .lrow.up .lv{color:var(--gain);} .lrow.dn .lv{color:var(--loss);}
+  .lrow .ltag{font-size:9px;color:var(--text-muted);margin-left:8px;}
+  .retgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px;}
+  .retgrid .rc{border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center;background:var(--bg-subtle);} .retgrid .rk{font-size:10px;color:var(--text-muted);} .retgrid .rv{font-size:13px;font-weight:600;margin-top:2px;}
+
+  /* ④ pro */
+  .pro-btn{display:flex;align-items:center;justify-content:center;gap:8px;border:1px dashed var(--border-strong);border-radius:var(--radius-md);padding:18px;font-size:13px;color:var(--text-secondary);background:var(--bg-subtle);}
+  .pro-tag{font-size:10px;font-weight:700;color:var(--gold);background:rgba(212,175,55,.14);border:1px solid rgba(212,175,55,.3);border-radius:5px;padding:1px 7px;}
+
+  /* ⑤ folds (details 展開) */
+  details.fold{border:1px solid var(--border);border-radius:var(--radius-sm);background:rgba(255,255,255,.012);overflow:hidden;margin-bottom:8px;}
+  details.fold[open]{background:var(--bg-subtle);}
+  details.fold>summary{display:flex;align-items:center;gap:10px;padding:13px 14px;cursor:pointer;list-style:none;} details.fold>summary::-webkit-details-marker{display:none;}
+  details.fold>summary:hover{background:var(--bg-hover);}
+  .f-title{font-size:14px;font-weight:600;color:var(--text-primary);} .f-sum{font-size:12px;color:var(--text-muted);margin-left:auto;}
+  .fbody{padding:4px 16px 16px;font-size:12px;color:var(--text-secondary);line-height:1.6;border-top:1px solid var(--border);margin-top:2px;padding-top:12px;}
+  .lockbox{border:1px dashed var(--gold);border-radius:8px;padding:12px;background:rgba(212,175,55,.06);color:var(--text-muted);font-size:11.5px;text-align:center;}
+
+  /* shared mini components for ⑤ */
+  .rangebar{position:relative;height:30px;margin:10px 0;} .rangebar .track{position:absolute;top:13px;left:0;right:0;height:4px;border-radius:2px;background:linear-gradient(90deg,var(--loss),var(--warning),var(--gain));opacity:.5;}
+  .rangebar .mk{position:absolute;top:7px;width:2px;height:16px;background:var(--text-primary);} .rangebar .mklab{position:absolute;top:-4px;font-size:9px;color:var(--text-muted);transform:translateX(-50%);}
+  .rangebar .cur{position:absolute;top:4px;width:10px;height:22px;border:2px solid var(--accent);border-radius:3px;transform:translateX(-50%);}
+  .stacked{display:flex;height:20px;border-radius:5px;overflow:hidden;margin:8px 0;font-size:9px;} .stacked .s{display:grid;place-items:center;color:#0b1220;font-weight:700;}
+  .twocol{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px;} .twocol .h{font-size:11px;font-weight:600;margin-bottom:5px;} .twocol .h.bull{color:var(--gain);} .twocol .h.bear{color:var(--loss);}
+  .twocol li{font-size:11px;margin:3px 0;color:var(--text-secondary);}
+  .reaction{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0;} .reaction .rc{border:1px solid var(--border);border-radius:8px;padding:9px;text-align:center;} .reaction .rk{font-size:10px;color:var(--text-muted);} .reaction .rv{font-size:15px;font-weight:600;margin-top:3px;}
+  table.qtab{width:100%;border-collapse:collapse;font-size:11px;margin-top:6px;} table.qtab th{color:var(--text-muted);font-weight:500;text-align:right;padding:5px 6px;border-bottom:1px solid var(--border);} table.qtab th:first-child{text-align:left;}
+  table.qtab td{text-align:right;padding:5px 6px;border-bottom:1px solid var(--border);color:var(--text-secondary);} table.qtab td:first-child{text-align:left;color:var(--text-primary);}
+  .ins{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;padding:6px 0;border-bottom:1px solid var(--border);} .ins .nm{color:var(--text-primary);} .ins .role{font-size:9px;color:var(--gold);border:1px solid rgba(212,175,55,.3);border-radius:4px;padding:0 5px;margin-left:6px;}
+  .newsitem{display:flex;gap:8px;font-size:11.5px;padding:6px 0;border-bottom:1px solid var(--border);color:var(--text-secondary);} .newsitem .dt{color:var(--text-muted);font-size:10px;white-space:nowrap;}
+  .linkpills{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px;} .linkpills a{font-size:11px;color:var(--accent);border:1px solid rgba(56,189,248,.3);border-radius:999px;padding:4px 11px;text-decoration:none;}
+  .disc{font-size:10px;color:var(--text-muted);margin-top:18px;line-height:1.55;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="legend">
+    <b>銘柄分析 Pane3 — 全体モックアップ v4</b>（⑤と5条件は<u>クリックで展開</u>）<br>
+    v4 変更: 時系列 <b>直近=右で統一</b>＋直近バー強調＋「8Q前→直近」明示 / §② 推移は <b>常時 sparkline（hoverで各Q値）・指標で出し分け</b> / <b>5条件 展開グラフに hover で詳細（根拠）tooltip 追加</b>。<br>
+    💡 §②の「出し分け」= <b>推移を見るべき指標（成長率・マージン等）には sparkline、単一値で十分な指標（ROE等）には sparkline を付けず値+矢印のみ</b>。下の §② で「営業CFマージン card には小グラフ有り／ROE card には無し」を見比べてください。数値はサンプル。
+  </div>
+
+  <!-- Hero (v2: ティッカー横にセクターchipを詰める) -->
+  <div class="hero">
+    <div class="id">
+      <div class="logo">N</div>
+      <div>
+        <div class="tkwrap"><span class="tk">NVDA</span><span class="secpill">Semiconductors</span></div>
+        <div class="co">NVIDIA Corporation · FY2026</div>
+      </div>
+      <div class="right"><div class="px">$192.53</div><div class="chg">-1.64% <span class="mini">1W -8.62% ・ 1M -8.81%</span></div></div>
+    </div>
+    <div class="row2"><span class="cdpill">決算速報まで 142日</span><button class="watch clickable">☆ ウォッチ追加</button></div>
+  </div>
+
+  <!-- 判定サマリー -->
+  <div class="panel">
+    <div class="vh"><div class="t">判定サマリー</div><div class="frac">条件充足 2 / 5</div></div>
+    <div class="callout">✓ 上昇試行が確認水準に到達 — NASDAQ Day 4 に +2.5% 超・出来高増の Follow-Through Day を満たしました。</div>
+    <div class="buckets">
+      <div class="bucket clickable"><div class="lab"><span class="star">★</span> EPS（対コンセンサス）</div><div class="big">+6.3%</div><div class="sub">$1.87 / 予想 $1.76</div><div class="drill">詳細 ↓</div></div>
+      <div class="bucket clickable"><div class="lab">売上（対コンセンサス）</div><div class="big">+3.4%</div><div class="sub">$81.6B / 予想 $78.9B</div><div class="drill">詳細 ↓</div></div>
+      <div class="bucket clickable"><div class="lab">ガイダンス（来期）</div><div class="big neutral">—</div><div class="sub">開示なし</div><div class="drill">詳細 ↓</div></div>
+    </div>
+    <div class="minis">
+      <div class="mini clickable"><div class="lab">連続ビート</div><div class="val">8<span class="unit">Q 連続</span></div></div>
+      <div class="mini clickable"><div class="lab">RS Rating <span style="color:var(--text-muted);font-size:10px;">（IBD・対ユニバース）</span></div><div class="val"><span class="rs-badge">50</span> <span class="unit">目安 80+ で強い</span></div></div>
+    </div>
+    <div class="src">出典: SEC / FMP（取得日: 本日）</div>
+  </div>
+
+  <div class="nav">
+    <div class="chip clickable active">決算</div><div class="chip clickable">品質・継続性</div><div class="chip clickable">テクニカル・買い場</div><div class="chip clickable">図解</div><div class="chip clickable">その他</div>
+  </div>
+
+  <!-- ① 決算 -->
+  <div class="chapter-h"><span class="no">①</span><span class="ti">決算</span><span class="meta">FY2026 Q4</span></div>
+  <div class="panel">
+    <div class="vh"><div class="t">決算3点 — 対コンセンサス</div></div>
+    <div class="three">
+      <div class="c"><div class="k">EPS</div><div class="v">$1.87</div><div class="e">予想 $1.76 ・ +6.3% <span style="color:var(--gain);">Beat</span></div></div>
+      <div class="c"><div class="k">売上</div><div class="v">$81.6B</div><div class="e">予想 $78.9B ・ +3.4% <span style="color:var(--gain);">Beat</span></div></div>
+      <div class="c"><div class="k">ガイダンス（来期）</div><div class="v neu">—</div><div class="e">開示なし</div></div>
+    </div>
+    <div class="subline">来期コンセンサス（YoY）&nbsp; 売上 <b>+96.2%</b> ・ EPS <b>+88.4%</b></div>
+    <!-- KB核心: 良い決算3点 連続 -->
+    <div class="goodq"><span class="lab">「良い決算」（EPS+売上+ガイダンス が全てコンセンサス超え）</span><b>連続 6 期</b><span class="hint">じっちゃま基準: 毎回3点揃うか</span></div>
+  </div>
+
+  <!-- 成長トレンド 8Q (WS2 + KB 3点) -->
+  <div class="panel">
+    <div class="vh"><div class="t">成長トレンド（直近8Q）<span style="font-size:11px;color:var(--text-muted);font-weight:400;margin-left:8px;">バーに hover で各四半期の「3点 beat」判定 + 推移</span></div></div>
+    <div class="spark-grid">
+      <div><div class="spark-title">EPS 成長率 YoY</div><div class="bars" id="eps-bars"></div></div>
+      <div><div class="spark-title">売上 成長率 YoY</div><div class="bars" id="rev-bars"></div></div>
+    </div>
+    <div class="axisnote"><b>← 8Q前</b>　　　　　時系列（株価チャートと同方向）　　　　　<b>直近 →</b>（直近Qを強調）</div>
+  </div>
+
+  <!-- 5条件 (クリック展開) -->
+  <div class="panel">
+    <div class="vh"><div class="t">ファンダメンタル5条件 <span style="font-size:12px;color:var(--text-muted);font-weight:400;">2/5 合致 — クリックで展開</span></div></div>
+    <div class="cond">
+      <details class="cli" open>
+        <summary><span class="ic pass">✓</span><span class="cname">営業CFマージン ≥ 15%</span><span class="cnum">19.8%</span><span class="pill up">良好</span><span class="chev">▸</span></summary>
+        <div class="cbody">
+          本業の現金創出力。EPS は会計操作の余地があるが、営業CF は最もごまかしにくい（じっちゃま「ナイス・バディの法則」）。
+          <div class="calc">営業CFマージン = 営業CF ÷ 売上高 = $16.2B ÷ $81.6B = 19.8%</div>
+          <div class="why"><b>なぜ 15% か</b>: 15〜35% が優良ゾーン。営業マージンが<b>ジリジリ拡大</b>しているかが優良化の兆候。</div>
+          <div class="hist" id="cf-hist"></div>
+          <div class="histlab"><span>8Q前 15.2%</span><span>直近 19.8% ↗ 拡大基調</span></div>
+          <div class="more">ⓘ 計算式・なぜCFか・閾値の根拠 →（詳細モーダル）</div>
+        </div>
+      </details>
+      <details class="cli">
+        <summary><span class="ic fail">—</span><span class="cname">EPS 連続増加</span><span class="cnum">3Q</span><span class="pill up">+312%</span><span class="chev">▸</span></summary>
+        <div class="cbody">
+          直近3期の EPS 推移。<b>加速</b>しているかが核心（じっちゃま「加速的上昇が必須」）。
+          <div class="calc">EPS = 純利益 ÷ 希薄化後株式数</div>
+          <div class="hist" id="eps-hist"></div>
+          <div class="histlab"><span>3期前 $0.61</span><span>直近 $1.87</span></div>
+          <div class="warn">⚠️ EPS 単独で判断しない。CFPS とのクロスチェック必須（粉飾検知）。</div>
+          <div class="more">ⓘ 詳細モーダル →</div>
+        </div>
+      </details>
+      <details class="cli"><summary><span class="ic fail">—</span><span class="cname">CFPS 連続増加</span><span class="cnum">4.19</span><span class="pill up">+272%</span><span class="chev">▸</span></summary>
+        <div class="cbody">CFPS = 営業CF ÷ 希薄化後株式数。EPS より「ごまかしにくい」継続性指標。<div class="more">ⓘ 詳細モーダル →</div></div></details>
+      <details class="cli"><summary><span class="ic pass">✓</span><span class="cname">売上高 連続増加</span><span class="cnum">$215.9B</span><span class="pill up">+254%</span><span class="chev">▸</span></summary>
+        <div class="cbody">SPS（1株売上）で評価。<b>直近Qで加速</b>が最低条件。<div class="more">ⓘ 詳細モーダル →</div></div></details>
+      <details class="cli"><summary><span class="ic fail">—</span><span class="cname">CFPS &gt; EPS（直近期）</span><span class="cnum">-0.71</span><span class="pill dn">未充足</span><span class="chev">▸</span></summary>
+        <div class="cbody">利益が現金を伴うかの第一足切り。<b>EPS &gt; CFPS の逆転 = 粉飾の疑い</b>。
+          <div class="twocol" style="grid-template-columns:1fr 1fr;"><div><div class="twocol" style="display:block;"><div class="rk muted small">CFPS</div><div class="val" style="font-size:18px;">$3.48</div></div></div><div><div class="rk muted small">EPS</div><div class="val" style="font-size:18px;">$4.19</div></div></div>
+          <div class="warn">⚠️ 現在 EPS &gt; CFPS（-0.71）。要注意。</div></div></details>
+    </div>
+  </div>
+
+  <!-- ② 品質・継続性 (WS3 + KB) -->
+  <div class="chapter-h"><span class="no">②</span><span class="ti">品質・継続性</span><span class="meta">儲ける力 × 伸び続ける力</span></div>
+  <div class="panel">
+    <div class="dv"><span style="font-size:15px;">🔍</span><span><b>screener で発見 → ここで根拠を確認。</b> <span class="badge sc" style="display:inline-block">screener条件</span> はスクリーナーと 1:1 対応。<b>sparkline は左=8Q前→右=直近（直近を強調）、hover で各 Q の値</b>。推移必須の指標のみ sparkline、ROE 等の単一値は値+矢印。</span></div>
+
+    <div class="grp-label">品質 <span class="en">— 儲ける力・効率・健全性（KB: 構造は単一値でも可、ただし「拡大推移」は優良サイン）</span></div>
+    <div class="cards">
+      <div class="mc hist"><div class="top"><span class="nm">営業CFマージン</span><span class="badge sc">≥15% ✓</span></div><div class="mid"><span class="val">19.8%</span><span class="chip ok">拡大基調 ↗</span></div><div class="sprow"><div class="sp2 acc" data-vals="15.2,16.1,17.0,17.1,18.0,18.4,19.1,19.8" data-unit="%"></div><span class="spcap">8Q</span></div><div class="ctx">マージンがジリジリ拡大＝優良化の兆候（KB）</div></div>
+      <div class="mc hist"><div class="top"><span class="nm">粗利率</span><span class="badge sc">screener条件</span></div><div class="mid"><span class="val">75.0%</span><span class="chip ok">+2.1pp YoY</span></div><div class="sprow"><div class="sp2 acc" data-vals="72.9,73.1,73.5,73.8,74.2,74.5,74.7,75.0" data-unit="%"></div><span class="spcap">8Q</span></div><div class="ctx">価格決定力の継続</div></div>
+      <div class="mc"><div class="top"><span class="nm">ROE</span><span class="badge kb">O'Neil ≥17% ✓</span></div><div class="mid"><span class="val">91.3%</span><span class="chip ok">高水準 ↑</span></div><div class="ctx">自己資本効率（KB: 単一値で可 — sparkline なし・前期比 ↑↓ のみ）。PER 52 / 予 38 / PEG 1.3 は展開表示</div></div>
+      <div class="mc hist"><div class="top"><span class="nm">OCF &gt; 純利益（質）</span><span class="badge sc">粉飾フィルタ</span></div><div class="mid"><span class="val">1.15x</span><span class="chip ok">健全</span></div><div class="sprow"><div class="sp2" data-vals="1.05,1.08,1.07,1.10,1.12,1.11,1.14,1.15" data-unit="x"></div><span class="spcap">8Q</span></div><div class="ctx">利益が現金を伴うか（会計品質の継続）</div></div>
+    </div>
+
+    <div class="grp-label">継続性 <span class="en">— 伸び続ける力（KB最重要: 成長の「加速度」と「毎回3点 beat」）</span></div>
+    <div class="cards">
+      <div class="mc hist"><div class="top"><span class="nm">EPS 成長 YoY <span style="color:var(--text-muted);font-size:10px;">+ 加速度</span></span><span class="badge sc">≥20% ✓</span></div><div class="mid"><span class="val">+39%</span><span class="chip warn">減速（前Q +48%）</span></div><div class="sprow"><div class="sp2" data-vals="486,168,103,82,71,60,48,39" data-unit="%"></div><span class="spcap">8Q</span></div><div class="ctx">KB最重要: 直近Q YoY ≥ 前Q YoY か（加速/減速）</div></div>
+      <div class="mc hist"><div class="top"><span class="nm">売上 成長 YoY <span style="color:var(--text-muted);font-size:10px;">+ 加速度</span></span><span class="badge sc">≥25% ✓</span></div><div class="mid"><span class="val">+34%</span><span class="chip warn">減速（前Q +38%）</span></div><div class="sprow"><div class="sp2" data-vals="262,122,94,78,69,56,38,34" data-unit="%"></div><span class="spcap">8Q</span></div><div class="ctx">直近Qで加速が最低条件（KB）</div></div>
+    </div>
+    <div class="strip">
+      <span class="pillbox"><span class="dot"></span>良い決算(3点)連続 <b>6期</b> <span style="color:var(--gold);font-size:10px;">KB核心</span></span>
+      <span class="pillbox"><span class="dot"></span>ガイダンス beat 連続 <b>5期</b> <span style="color:var(--accent);font-size:10px;">上方修正</span></span>
+      <span class="pillbox"><span class="dot"></span>EPS CAGR 3年 <b>+86%</b> <span style="color:var(--gold);font-size:10px;">KB ≥25%</span></span>
+      <span class="pillbox"><span class="dot"></span>機関投資家保有 QoQ <b>+0.6pt</b> <span style="color:var(--text-muted);font-size:10px;">4Q ↗</span></span>
+    </div>
+    <div class="keep"><b>会社概要</b> は現状維持（情報量十分とのフィードバック）。</div>
+  </div>
+
+  <!-- ③ テクニカル・買い場 (実装忠実化) -->
+  <div class="chapter-h"><span class="no">③</span><span class="ti">テクニカル・買い場</span></div>
+  <div class="panel">
+    <div class="ctop">
+      <span class="cchip px">現在 $192.53</span>
+      <span class="cchip cup">取っ手付きカップ 形成中 <span class="pro-tag">Premium</span></span>
+      <span class="cchip gc">ゴールデンクロス</span>
+      <span class="cchip rs">RS 50</span>
+      <span class="ctools"><span class="tg">線 / ローソク</span><span class="periods"><span class="p">1M</span><span class="p on">3M</span><span class="p">6M</span><span class="p">1Y</span><span class="p">5Y</span></span></span>
+    </div>
+    <div class="chartbox">
+      <svg viewBox="0 0 820 200" width="100%" height="170" preserveAspectRatio="none">
+        <defs><linearGradient id="ar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#38bdf8" stop-opacity=".22"/><stop offset="1" stop-color="#38bdf8" stop-opacity="0"/></linearGradient></defs>
+        <!-- cup area -->
+        <path d="M120,55 Q230,150 360,150 Q470,150 520,70 L520,160 L120,160 Z" fill="rgba(52,239,129,.07)"/>
+        <line x1="520" y1="48" x2="820" y2="48" stroke="#34ef81" stroke-dasharray="5 4" stroke-width="1.2"/>
+        <!-- right labels handled by .rlabels -->
+        <line x1="0" y1="120" x2="820" y2="120" stroke="#334155" stroke-dasharray="3 3" stroke-width="1"/>
+        <line x1="0" y1="88" x2="820" y2="88" stroke="#f59e0b" stroke-dasharray="2 4" stroke-width="1" opacity=".6"/>
+        <!-- analyst target -->
+        <line x1="0" y1="30" x2="820" y2="30" stroke="#38bdf8" stroke-width="1.2" opacity=".8"/>
+        <!-- price line -->
+        <path d="M0,150 L60,140 L120,55 L180,95 L240,130 L300,150 L360,150 L420,120 L480,90 L520,70 L580,80 L640,72 L700,95 L760,88 L820,92 L820,200 L0,200 Z" fill="url(#ar)"/>
+        <path d="M0,150 L60,140 L120,55 L180,95 L240,130 L300,150 L360,150 L420,120 L480,90 L520,70 L580,80 L640,72 L700,95 L760,88 L820,92" fill="none" stroke="#38bdf8" stroke-width="2"/>
+        <!-- SMA50 / SMA200 -->
+        <path d="M0,130 L200,118 L400,110 L600,100 L820,96" fill="none" stroke="#f59e0b" stroke-width="1.3" opacity=".85"/>
+        <path d="M0,145 L200,140 L400,134 L600,128 L820,124" fill="none" stroke="#94a3b8" stroke-width="1.3" opacity=".7"/>
+        <!-- pivot dot -->
+        <circle cx="520" cy="48" r="4" fill="#34ef81"/>
+        <!-- earnings markers -->
+        <line x1="180" y1="0" x2="180" y2="180" stroke="#34ef81" stroke-dasharray="2 3" stroke-width="1" opacity=".5"/>
+        <line x1="480" y1="0" x2="480" y2="180" stroke="#34ef81" stroke-dasharray="2 3" stroke-width="1" opacity=".5"/>
+        <!-- volume bars -->
+        <g opacity=".5">
+          <rect x="20" y="172" width="8" height="8" fill="#475569"/><rect x="120" y="166" width="8" height="14" fill="#34ef81"/><rect x="240" y="174" width="8" height="6" fill="#f87171"/><rect x="360" y="170" width="8" height="10" fill="#475569"/><rect x="480" y="162" width="8" height="18" fill="#34ef81"/><rect x="640" y="168" width="8" height="12" fill="#34ef81"/><rect x="760" y="172" width="8" height="8" fill="#475569"/>
+        </g>
+      </svg>
+      <div class="rlabels">
+        <span style="color:#38bdf8;">アナリスト目標 $308</span>
+        <span style="color:#34ef81;">Pivot $215.62</span>
+        <span style="color:#f59e0b;">50DMA+15% $189</span>
+        <span style="color:#f87171;">リスク確認 -8% $177</span>
+      </div>
+    </div>
+    <div class="ind">
+      <div class="i"><span class="sw" style="background:#38bdf8;"></span>株価</div>
+      <div class="i"><span class="sw" style="background:#f59e0b;"></span>SMA 50</div>
+      <div class="i"><span class="sw" style="background:#94a3b8;"></span>SMA 200</div>
+      <div class="i"><span class="sw" style="background:#34ef81;"></span>取っ手付きカップ / Pivot</div>
+      <div class="i"><span class="sw" style="background:#34ef81;"></span>決算日（Beat=緑/Miss=赤）</div>
+    </div>
+
+    <!-- PriceLadder (Premium) -->
+    <div class="ladder">
+      <div class="lh"><span>買い場の目安（価格ラダー）</span><span class="pro-tag">Premium</span></div>
+      <div class="lrow"><span class="lk">52週高値</span><span class="lv">$212.19</span></div>
+      <div class="lrow"><span class="lk">アナリスト目標<span class="ltag">consensus</span></span><span class="lv up">$308.00</span></div>
+      <div class="lrow"><span class="lk">買い目安 Pivot<span class="ltag">cup-handle</span></span><span class="lv">$215.62</span></div>
+      <div class="lrow cur"><span class="lk">現在価格</span><span class="lv">$192.53</span></div>
+      <div class="lrow"><span class="lk">50日移動平均</span><span class="lv">$164.20</span></div>
+      <div class="lrow"><span class="lk">支持線目安<span class="ltag">box support</span></span><span class="lv">$171.40</span></div>
+      <div class="lrow"><span class="lk">リスク確認ライン<span class="ltag">現在 -8%</span></span><span class="lv dn">$177.13</span></div>
+    </div>
+    <div class="subline" style="display:flex;justify-content:space-between;"><span>ブレイクアウト強度（参考）</span><span class="muted small">O'Neil: ブレイク時 出来高 +40% 以上が目安</span></div>
+
+    <!-- ReturnGrid -->
+    <div class="retgrid">
+      <div class="rc"><div class="rk">1W</div><div class="rv" style="color:var(--loss)">-8.6%</div></div>
+      <div class="rc"><div class="rk">1M</div><div class="rv" style="color:var(--loss)">-8.8%</div></div>
+      <div class="rc"><div class="rk">3M</div><div class="rv" style="color:var(--gain)">+14.9%</div></div>
+      <div class="rc"><div class="rk">1Y</div><div class="rv" style="color:var(--gain)">+22.1%</div></div>
+    </div>
+  </div>
+
+  <!-- ④ 図解 (Pro) -->
+  <div class="chapter-h"><span class="no">④</span><span class="ti">図解で理解する</span><span class="meta"><span class="pro-tag">Pro</span></span></div>
+  <div class="panel"><div class="pro-btn clickable">📊 図解を生成する　→</div></div>
+
+  <!-- ⑤ その他 (クリック展開・中身作り込み) -->
+  <div class="chapter-h"><span class="no">⑤</span><span class="ti">その他</span><span class="meta">クリックで展開</span></div>
+  <div class="panel">
+
+    <details class="fold" open>
+      <summary><span class="f-title">アナリスト視点</span><span class="f-sum">目標 $308 ・ +60% upside ・ n=74 ▾</span></summary>
+      <div class="fbody">
+        <div style="font-size:11px;color:var(--text-muted);">目標株価レンジ（現在値 ◇）</div>
+        <div class="rangebar"><div class="track"></div>
+          <div class="mk" style="left:8%;"></div><div class="mklab" style="left:8%;">Low $230</div>
+          <div class="mk" style="left:55%;"></div><div class="mklab" style="left:55%;">Median $308</div>
+          <div class="mk" style="left:92%;"></div><div class="mklab" style="left:92%;">High $375</div>
+          <div class="cur" style="left:30%;"></div></div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:14px;">レーティング（n=74）</div>
+        <div class="stacked"><div class="s" style="width:78%;background:var(--gain);">Buy 58</div><div class="s" style="width:18%;background:var(--text-muted);">Hold 13</div><div class="s" style="width:4%;background:var(--loss);">Sell 3</div></div>
+        <div style="font-size:11px;margin-top:8px;">直近90日 モメンタム: <b style="color:var(--gain);">+6 件 格上げ</b>（格下げ 2 件）</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:10px;">直近の格付け変更:</div>
+        <table class="qtab"><tr><td>Morgan ***</td><td>格上げ</td><td>Hold→Buy</td><td>$340</td></tr><tr><td>Gold***</td><td>目標引上</td><td>$300→$360</td><td></td></tr></table>
+        <div style="font-size:10px;color:var(--gold);margin-top:6px;">🔒 Free は機関名を伏せ字。Premium で全表示・鮮度 N日前。</div>
+      </div>
+    </details>
+
+    <details class="fold">
+      <summary><span class="f-title">市場の声</span><span class="f-sum">強気 ・ 直近ニュースの論点 ▾</span></summary>
+      <div class="fbody">
+        <div style="margin-bottom:8px;"><span style="font-size:10px;font-weight:700;background:rgba(52,239,129,.18);color:var(--gain);border-radius:5px;padding:2px 8px;">総合: 強気</span></div>
+        統合見解（要約）: データセンター需要の継続と次世代 GPU の立ち上げが論点。供給制約と競合の動向に注視。
+        <div class="twocol">
+          <div><div class="h bull">▲ 強気材料</div><ul><li>DC 売上が前年比で大幅増</li><li>次世代 GPU の受注好調</li><li>粗利率の高位安定</li></ul></div>
+          <div><div class="h bear">▼ 弱気材料</div><ul><li>成長率の鈍化（前Q比）</li><li>地政学・輸出規制リスク</li><li>高 PER による調整余地</li></ul></div>
+        </div>
+        <div style="font-size:10px;color:var(--gold);margin-top:8px;">🔒 Free は冒頭1文のみ。Pro で全文 + 強気/弱気の根拠。</div>
+      </div>
+    </details>
+
+    <details class="fold">
+      <summary><span class="f-title">過去 8Q 決算反応</span><span class="f-sum">Beat 6回 平均 +5.1% ・ Miss 1回 -7.0% <span class="pro-tag">Pro</span> ▾</span></summary>
+      <div class="fbody">
+        <div class="reaction">
+          <div class="rc"><div class="rk">Beat 後（6回）</div><div class="rv" style="color:var(--gain)">+5.1%</div></div>
+          <div class="rc"><div class="rk">In-line（1回）</div><div class="rv" style="color:var(--text-muted)">+0.4%</div></div>
+          <div class="rc"><div class="rk">Miss 後（1回）</div><div class="rv" style="color:var(--loss)">-7.0%</div></div>
+        </div>
+        <table class="qtab"><tr><th>四半期</th><th>判定</th><th>surprise</th><th>翌5日 累積</th></tr>
+          <tr><td>FY26 Q4</td><td style="color:var(--gain)">Beat</td><td>+6.3%</td><td style="color:var(--gain)">+7.8%</td></tr>
+          <tr><td>FY26 Q3</td><td style="color:var(--loss)">Miss</td><td>-0.9%</td><td style="color:var(--loss)">-7.0%</td></tr>
+          <tr><td>FY26 Q2</td><td style="color:var(--gain)">Beat</td><td>+4.0%</td><td style="color:var(--gain)">+4.5%</td></tr>
+        </table>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:6px;">t-1 終値 → t+5 終値 の累積リターン。</div>
+      </div>
+    </details>
+
+    <details class="fold">
+      <summary><span class="f-title">Insider 取引</span><span class="f-sum">直近90日 買付 2件 $1.2M ▾</span></summary>
+      <div class="fbody">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">Form 4 経営者売買</div>
+        <div class="ins"><span><span class="nm">J. Huang</span><span class="role">CEO</span></span><span style="color:var(--gain)">買付 $0.8M</span></div>
+        <div class="ins"><span><span class="nm">C. Kress</span><span class="role">CFO</span></span><span style="color:var(--loss)">売却 $2.1M（10b5-1）</span></div>
+        <div style="font-size:11px;color:var(--text-muted);margin:10px 0 4px;">13F 機関投資家保有</div>
+        <div class="lockbox">FMP Ultimate で開放予定（現在 restricted）。SEC EDGAR の 13F リンクを表示 →</div>
+      </div>
+    </details>
+
+    <details class="fold">
+      <summary><span class="f-title">ニュース・IR・10-K</span><span class="f-sum">最新 12 件 ・ 3時間前更新 ▾</span></summary>
+      <div class="fbody">
+        <div class="newsitem"><span class="dt">3h</span><span>次世代 GPU の量産が前倒し、供給制約が緩和へ</span></div>
+        <div class="newsitem"><span class="dt">1d</span><span>大手クラウドが追加発注を発表</span></div>
+        <div class="linkpills"><a href="#">IR サイト</a><a href="#">直近決算 Call</a><a href="#">SEC EDGAR</a><a href="#">10-K（年次報告書）</a></div>
+      </div>
+    </details>
+  </div>
+
+  <div class="disc">※ 数値はすべてサンプル。表示は事実＋推移のみで売買推奨は出さない（金商法§38）。「良い決算3点」「閾値達成バッジ」は事実判定であって買い推奨ではない。色は投資業界慣習（上昇=緑/下落=赤/警告=amber/cyan=ブランド色）。<br>
+  ⚠️ 実装メモ: 8Q tooltip の「ガイダンス beat 判定」と「良い決算3点 連続」は backend に per-Q の guidance_verdict 列追加が必要（現 quarterly-history には無い）。他は既存データで配線可。</div>
+</div>
+
+<script>
+  // 8Q: 3点 beat (EPS/売上/ガイダンス) — KB「良い決算」。1つでも miss で「悪い決算」
+  const Q=[
+    {q:"FY25 Q1",epsYoY:486,revYoY:262,eps:1,rev:1,gd:1},
+    {q:"FY25 Q2",epsYoY:168,revYoY:122,eps:1,rev:1,gd:1},
+    {q:"FY25 Q3",epsYoY:103,revYoY:94,eps:1,rev:1,gd:0},   // ガイダンス miss = 悪い決算
+    {q:"FY25 Q4",epsYoY:82,revYoY:78,eps:1,rev:1,gd:1},
+    {q:"FY26 Q1",epsYoY:71,revYoY:69,eps:1,rev:1,gd:1},
+    {q:"FY26 Q2",epsYoY:60,revYoY:56,eps:1,rev:1,gd:1},
+    {q:"FY26 Q3",epsYoY:48,revYoY:38,eps:0,rev:1,gd:1},   // EPS miss
+    {q:"FY26 Q4",epsYoY:39,revYoY:34,eps:1,rev:1,gd:1},
+  ];
+  const mE=Math.max(...Q.map(d=>d.epsYoY)),mR=Math.max(...Q.map(d=>d.revYoY));
+  const bm=v=>`<span class="bm ${v?'beat':'miss'}">${v?'Beat':'Miss'}</span>`;
+  function tip(d){const good=d.eps&&d.rev&&d.gd;return `<div class="tip">
+    <div class="th"><span class="q">${d.q}</span><span class="verdict ${good?'good':'bad'}">${good?'良い決算 (3点)':'悪い決算'}</span></div>
+    <div class="three3">
+      <div class="r"><span class="k">EPS</span>${bm(d.eps)}</div>
+      <div class="r"><span class="k">売上</span>${bm(d.rev)}</div>
+      <div class="r"><span class="k">ガイダンス</span>${bm(d.gd)}</div>
+    </div>
+    <div class="yoy">YoY: EPS +${d.epsYoY}% ・ 売上 +${d.revYoY}%</div>
+    <div class="free">実績/予想/surprise の数値詳細は <span class="lock">🔒 Premium</span></div>
+  </div>`;}
+  function render(id,key,max){document.getElementById(id).innerHTML=Q.map((d,i)=>{
+    const good=d.eps&&d.rev&&d.gd;const h=Math.max(6,Math.round(d[key]/max*100));const latest=i===Q.length-1?'latest':'';
+    return `<div class="bcol ${key==='revYoY'?'rev':''} ${good?'':'bad'} ${latest}">${tip(d)}<div class="pct">${d[key]}%</div><div class="bar" style="height:${h}%"></div><div class="qlab">${d.q.replace('FY','')}</div></div>`;
+  }).join("");}
+  render("eps-bars","epsYoY",mE);render("rev-bars","revYoY",mR);
+
+  // §② sparklines + hover値
+  document.querySelectorAll('.sp2[data-vals]').forEach(el=>{
+    const v=el.getAttribute('data-vals').split(',').map(Number);const u=el.getAttribute('data-unit')||'';
+    const mx=Math.max(...v),mn=Math.min(...v),rg=(mx-mn)||1;
+    const labs=["7Q前","6Q前","5Q前","4Q前","3Q前","2Q前","前Q","直近"];
+    el.innerHTML=v.map((x,i)=>`<div class="sb" style="height:${20+Math.round((x-mn)/rg*80)}%"><span class="sbt">${labs[i]}: ${x}${u}</span></div>`).join('');
+  });
+  // 5条件 展開内の小 history bars
+  // 5条件 展開グラフ: 各バー hover で詳細(根拠) tooltip
+  function hbars(id,items){const el=document.getElementById(id);if(!el)return;
+    const vals=items.map(x=>x.v);const mx=Math.max(...vals),mn=Math.min(...vals),rg=(mx-mn)||1;
+    el.innerHTML=items.map((it)=>`<div class="hb" style="height:${25+Math.round((it.v-mn)/rg*75)}%"><span class="htip"><b>${it.q}</b>　${it.disp}${it.sub?`<br><span class="hsub">${it.sub}</span>`:''}</span></div>`).join('');}
+  hbars("cf-hist",[
+    {q:"FY25 Q1",v:15.2,disp:"15.2%"},{q:"FY25 Q2",v:16.1,disp:"16.1%"},{q:"FY25 Q3",v:17.0,disp:"17.0%"},{q:"FY25 Q4",v:17.1,disp:"17.1%"},
+    {q:"FY26 Q1",v:18.0,disp:"18.0%"},{q:"FY26 Q2",v:18.4,disp:"18.4%"},{q:"FY26 Q3",v:19.1,disp:"19.1%"},
+    {q:"FY26 Q4",v:19.8,disp:"19.8%",sub:"営業CF $16.2B ÷ 売上 $81.6B"}]);
+  hbars("eps-hist",[
+    {q:"3期前",v:0.61,disp:"$0.61",sub:"純利益 $1.5B"},{q:"2期前",v:0.92,disp:"$0.92"},{q:"前期",v:1.21,disp:"$1.21"},
+    {q:"直近",v:1.87,disp:"$1.87",sub:"純利益 $4.6B ÷ 希薄化株 2.46B"}]);
+</script>
+</body>
+</html>
