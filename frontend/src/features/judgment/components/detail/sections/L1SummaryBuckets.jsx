@@ -419,6 +419,9 @@ export default function L1SummaryBuckets({
           >
             <span style={bDrillStyle}>詳細 ↓</span>
             <span style={bLabelStyle}>
+              {/* 監査 2-2 (2026-07-01・sub-agent review): ★ は「3点中の最重要=EPS」を示す【単一マーカー】。
+                  正本 mockup .star は EPS 行のみに付与。売上/ガイダンスには付けない (全付与は視覚階層を
+                  消し原則3 minimalism に反する = 記号の意味 inflation)。両方向 drift 防止のため意図を明記。 */}
               <span style={{ color: 'var(--color-warning, #fbbf24)', fontSize: 11 }}>★</span>
               EPS（対コンセンサス）
             </span>
@@ -448,7 +451,6 @@ export default function L1SummaryBuckets({
           >
             <span style={bDrillStyle}>詳細 ↓</span>
             <span style={bLabelStyle}>
-              <span style={{ color: 'var(--color-warning, #fbbf24)', fontSize: 11 }}>★</span>
               売上（対コンセンサス）
             </span>
             {revActual != null ? (
@@ -477,7 +479,6 @@ export default function L1SummaryBuckets({
           >
             <span style={bDrillStyle}>詳細 ↓</span>
             <span style={bLabelStyle}>
-              <span style={{ color: 'var(--color-warning, #fbbf24)', fontSize: 11 }}>★</span>
               ガイダンス（来期）
             </span>
             {gLabel != null ? (

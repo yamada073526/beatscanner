@@ -76,9 +76,11 @@ mockup-fidelity 三分類の「意図不明は accidental と決め打ちせず 
 
 - ✅ C7 (期間別リターン 1W/1M/3M) — 前 commit で着地済
 - ✅ C10 #4 (WL → row2) / #8 (最終更新 X分前) — 本 sprint 着地
+- ✅ 2-3 (RS 出典注記) — 本 sprint 着地
+- ✅ **2-2 (buckets ★)** — user 依頼の sub-agent review → 「EPS のみ ★」で決着 (実装の 3-bucket ★ を EPS 単独へ・mockup 準拠・意図をコメント明記)。着地済
+- ✅ **§③ 4-5 / 4-6 (mockup 更新)** — user 承認「mockup を実装に合わせる」→ `pane3-full-v5.html` 更新済: 損切りライン行を breakout-gated に (常時表示を撤去 + §38 コメント)・現在価格行に「ブレイク確認まで 🔒 Premium」追加・teaser 文言修正
 - ⏹ C10 #6 (地合い grid) / #7 (RS ゲージ) — user 決定「やらない」(mockup に無い新機能)
-- ⏸ §③ 4-5 / 4-6 / 2-1 — §38 gate (mockup へ戻さず mockup 側を更新)
-- ⏸ 2-2・微差 — user 判断待ち
+- ⏸ 2-1 (判定サマリー callout) / 微差 — 現状維持推奨・優先度低
 
 ---
 
