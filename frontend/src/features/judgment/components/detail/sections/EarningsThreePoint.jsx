@@ -74,8 +74,12 @@ const cellSubStyle = { fontSize: 12, color: 'var(--text-secondary)', marginTop: 
  * @param {object} props
  * @param {object|null} props.guidance - { eps:{actual,estimated,surprise_pct}, revenue:{...}, forward:{next_q:{...}} }
  * @param {boolean} [props.isLoading]
+ * @param {number|null} [props.beatStreak] - 良い決算(EPS+売上ともbeat)の連続期数。v313 Sprint S4 followup
+ *   (user dogfood 2026-07-01「mockupの.goodqバナー通りに」): mockup pane3-full-v5.html §① L330 の
+ *   .goodq を再現。 元は EarningsGrowthSpark(成長トレンド) に緑chipで配置したが、成長トレンドのEPS bar
+ *   (緑)と視覚的にグルーピングされ誤読を招くため mockup 通りこの位置(決算3点直下)へ移設。
  */
-export default function EarningsThreePoint({ guidance, isLoading = false }) {
+export default function EarningsThreePoint({ guidance, isLoading = false, beatStreak = null }) {
   // loading
   if (isLoading && !guidance) {
     return (
@@ -168,6 +172,30 @@ export default function EarningsThreePoint({ guidance, isLoading = false }) {
             {revYoy != null && <>売上 {fmtPct(revYoy)}</>}
             {revYoy != null && epsYoy != null && ' · '}
             {epsYoy != null && <>EPS {fmtPct(epsYoy)}</>}
+          </span>
+        </div>
+      )}
+
+      {/* mockup .goodq (pane3-full-v5.html L330): 「良い決算」連続期数バナー。streak>=2 のみ表示
+          (1期は anchor として弱い + noise、EpsBeatStreakChip 等既存 chip と同基準)。
+          §38: 過去事実の「回数」のみ、将来予測・買い推奨なし。文言は mockup の「EPS+売上+ガイダンス」
+          でなく実装が実際に判定する「EPS+売上」の2点に忠実 (backend beat_streak はガイダンス3点目を
+          guidance_snapshots 8Q backfill 後に拡張予定・Sprint 4c DEFER。3点と謳うと実態より厳格な
+          基準を標榜する Trust Cliff になるため、文言は2点の事実のみ)。 */}
+      {Number.isFinite(beatStreak) && beatStreak >= 2 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '10px 13px',
+          border: '1px solid color-mix(in srgb, var(--color-gold) 26%, var(--border))',
+          borderRadius: 'var(--radius-sm, 9px)',
+          background: 'linear-gradient(90deg, color-mix(in srgb, var(--color-gold) 8%, transparent), transparent)',
+        }}>
+          <span style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>
+            「良い決算」（EPS+売上が共にコンセンサス超え）
+          </span>
+          <b style={{ color: 'var(--color-gold)' }}>連続 {beatStreak} 期</b>
+          <span style={{ marginLeft: 'auto', fontSize: 10.5, color: 'var(--text-muted)' }}>
+            基準: 毎回2点揃うか
           </span>
         </div>
       )}
