@@ -160,19 +160,24 @@ export default function EarningsThreePoint({ guidance, isLoading = false, beatSt
         </div>
       </div>
 
-      {/* mockup .future-strip: 来期コンセンサス YoY (色なし・中立) */}
+      {/* mockup .subline (pane3-full-v5.html L329): 来期コンセンサス YoY。旧実装は .future-strip の
+          「箱 (bg + border + radius)」だったが、良い決算 goodq バナーと同レベルの視覚重量になり
+          「来期 = より重要度が低い情報」の階層が崩れていた (user dogfood 2026-07-01)。mockup 通り
+          上端 hairline のみの軽量 subline に降格し、goodq バナーより下位の情報だと一目でわかる形に。
+          §38: 来期 = forward consensus のため数値は neutral 維持 (mockup .subline b は gain 色だが、
+          緑にすると「強気の将来予測」の断定に読まれるため neutral を優先。降格の目的とも整合)。 */}
       {showFuture && (
         <div style={{
-          background: 'var(--bg-future, var(--bg-subtle))', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-sm, 9px)', padding: '13px 16px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-3, 12px)',
+          fontSize: 12,
+          color: 'var(--text-secondary)',
+          paddingTop: 'var(--space-3, 12px)',
+          borderTop: '1px solid var(--border)',
+          fontVariantNumeric: 'tabular-nums',
         }}>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>来期コンセンサス（YoY）</span>
-          <span style={{ fontSize: 15, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>
-            {revYoy != null && <>売上 {fmtPct(revYoy)}</>}
-            {revYoy != null && epsYoy != null && ' · '}
-            {epsYoy != null && <>EPS {fmtPct(epsYoy)}</>}
-          </span>
+          来期コンセンサス（YoY）&nbsp;
+          {revYoy != null && <>売上 <b style={{ fontWeight: 700 }}>{fmtPct(revYoy)}</b></>}
+          {revYoy != null && epsYoy != null && ' ・ '}
+          {epsYoy != null && <>EPS <b style={{ fontWeight: 700 }}>{fmtPct(epsYoy)}</b></>}
         </div>
       )}
 
