@@ -17,7 +17,9 @@ import re
 import pytest
 
 from app.earnings_mailer import (
+    COMPLETENESS_SOURCE_LABEL,
     COMPLETENESS_STATUS_LABEL,
+    COMPLETENESS_STATUS_NOTE,
     EARNINGS_DISCLAIMER_INLINE,
     _build_earnings_html,
     _build_earnings_text,
@@ -413,6 +415,92 @@ class TestCompletenessLabel:
         for label in COMPLETENESS_STATUS_LABEL.values():
             assert "欠落" not in label
             assert "エラー" not in label
+
+    def test_source_label_institutional_mirror(self):
+        """SOURCE_LABEL の institutional が in-app 完全性台帳の row label と 1:1 mirror。
+
+        completenessLedger.js classifyInstitutional の rows[0].label と一致 (PR#149 B の続き、
+        email 完全性台帳と in-app を再び 1:1 に揃える)。
+        """
+        assert COMPLETENESS_SOURCE_LABEL["institutional"] == "機関投資家の保有（13F）"
+
+    def test_institutional_renders_when_present(self):
+        """completeness に institutional があると HTML / text の取得状況に描画される。"""
+        p = build_earnings_payload(
+            ticker="AAPL",
+            verdict="beat",
+            surprise_pct=5.0,
+            eps_actual=1.5,
+            eps_estimate=1.4,
+            n_of_5=4,
+            conditions=SAMPLE_CONDITIONS,
+            completeness={
+                "earnings_surprises": "ok",
+                "income_q": "ok",
+                "cash_flow_q": "na",
+                "institutional": "ok",
+            },
+            snapshot_jst="2026-07-01T07:00:00+09:00",
+        )
+        html = _build_earnings_html([p])
+        text = _build_earnings_text([p])
+        assert "機関投資家の保有（13F）" in html
+        assert "機関投資家の保有（13F）" in text
+
+    def test_status_note_mirror(self):
+        """STATUS_NOTE が frontend completenessLedger.js と 1:1 mirror (理由開示の文言)。"""
+        assert COMPLETENESS_STATUS_NOTE["failed"] == (
+            "最新データを取得できませんでした（時間をおいて再読み込みで解消する場合があります）。"
+        )
+        assert COMPLETENESS_STATUS_NOTE["na"] == (
+            "この銘柄では該当データがありません（新規上場・非対象等）。"
+        )
+
+    def test_failed_and_na_show_reason_note(self):
+        """取得失敗 / 非該当 の行に理由注記が併記される (欠陥に見えない・in-app と 1:1)。HTML / text 両方。"""
+        p = build_earnings_payload(
+            ticker="NVDA",
+            verdict="inline",
+            surprise_pct=1.0,
+            eps_actual=0.89,
+            eps_estimate=0.88,
+            n_of_5=4,
+            conditions=SAMPLE_CONDITIONS,
+            completeness={
+                "earnings_surprises": "ok",
+                "income_q": "na",         # 非該当 → na note
+                "cash_flow_q": "ok",
+                "institutional": "failed",  # 取得失敗 → failed note
+            },
+            snapshot_jst="2026-07-01T07:00:00+09:00",
+        )
+        html = _build_earnings_html([p])
+        text = _build_earnings_text([p])
+        for body in (html, text):
+            assert COMPLETENESS_STATUS_NOTE["failed"] in body
+            assert COMPLETENESS_STATUS_NOTE["na"] in body
+
+    def test_ok_status_has_no_reason_note(self):
+        """ok 行には注記を付けない (取得済みに「再取得で解消」 等の不要文を出さない)。"""
+        p = build_earnings_payload(
+            ticker="MSFT",
+            verdict="beat",
+            surprise_pct=4.0,
+            eps_actual=2.95,
+            eps_estimate=2.84,
+            n_of_5=5,
+            conditions=SAMPLE_CONDITIONS,
+            completeness={
+                "earnings_surprises": "ok",
+                "income_q": "ok",
+                "cash_flow_q": "ok",
+                "institutional": "ok",
+            },
+            snapshot_jst="2026-07-01T07:00:00+09:00",
+        )
+        html = _build_earnings_html([p])
+        assert COMPLETENESS_STATUS_NOTE["failed"] not in html
+        assert COMPLETENESS_STATUS_NOTE["na"] not in html
 
     def test_completeness_in_html(self):
         """取得状況が HTML に反映されること。"""

@@ -108,6 +108,19 @@ COMPLETENESS_SOURCE_LABEL: dict[str, str] = {
     "earnings_surprises": "EPS / 売上サプライズ",
     "income_q": "四半期 損益",
     "cash_flow_q": "四半期 キャッシュフロー",
+    # 機関投資家の保有 (13F・O'Neil "I")。in-app 完全性台帳の institutional クラスタ
+    # row label (completenessLedger.js classifyInstitutional) と 1:1 mirror。
+    "institutional": "機関投資家の保有（13F）",
+}
+
+# ─── completeness STATUS_NOTE (frontend completenessLedger.js STATUS_NOTE と 1:1 mirror) ──
+# 取得失敗 / 非該当 の「なぜ取れないか」 を 1 行で開示する注記 (in-app AuditRow と同一)。
+# これが無いと「取得失敗」 がアプリの欠陥に見える (2026-07-01 user feedback)。failed=一時的・
+# 再取得で解消しうる / na=この銘柄に該当データが無い (新規上場・非対象等) を中立語で明示。
+# §38: 取得状況の事実のみ・verdict 語なし (in-app で vetted 済の文言をそのまま流用)。
+COMPLETENESS_STATUS_NOTE: dict[str, str] = {
+    "failed": "最新データを取得できませんでした（時間をおいて再読み込みで解消する場合があります）。",
+    "na": "この銘柄では該当データがありません（新規上場・非対象等）。",
 }
 
 
@@ -420,9 +433,18 @@ def _render_completeness_html(completeness: dict[str, str]) -> str:
         src_label = COMPLETENESS_SOURCE_LABEL.get(source_key, source_key)
         # mail_color_constants.py が SSOT — hex 直書き禁止
         color = BEAT_COLOR if status == "ok" else INLINE_COLOR
+        # 取得失敗 / 非該当 は理由注記を行下に併記 (in-app AuditRow と 1:1)。中立色・小さめ。
+        note = COMPLETENESS_STATUS_NOTE.get(status)
+        note_html = (
+            f'<span style="display:block;color:{TEXT_MUTED};font-size:11px;'
+            f'font-weight:400;margin-top:1px;">{note}</span>'
+            if note
+            else ""
+        )
         items.append(
             f'<li style="color:{color};font-size:12px;margin-bottom:2px;">'
             f'{src_label}: {label}'
+            f'{note_html}'
             f'</li>'
         )
     return "\n".join(items)
@@ -669,6 +691,10 @@ def _render_single_ticker_block_text(payload: EarningsNotifyPayload) -> str:
         label_s = COMPLETENESS_STATUS_LABEL.get(status, status)
         src_label = COMPLETENESS_SOURCE_LABEL.get(source_key, source_key)
         lines.append(f"    {src_label}: {label_s}")
+        # 取得失敗 / 非該当 は理由注記を 1 段インデントで併記 (in-app AuditRow と 1:1)。
+        note = COMPLETENESS_STATUS_NOTE.get(status)
+        if note:
+            lines.append(f"      {note}")
     lines.append(f"  取得時刻: {snapshot_jst} JST")
     lines.append(f"  {EARNINGS_DISCLAIMER_INLINE}")
     lines.append(f"  {ticker} の決算を確認する: {url}")
