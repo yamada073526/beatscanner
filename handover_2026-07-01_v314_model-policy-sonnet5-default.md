@@ -28,9 +28,15 @@
 - **design 美意識 gate / Trust Cliff 判断 / Hallucination Guard 4 層設計などの main 主判断 = 自動では上がらない**。Claude が着手前に「Opus 4.8 推奨、`/model opus` で」と proactive 通知 → user 手動切替。
 - sub-agent 既定も Sonnet 4.6/4.7 → **Sonnet 5** に昇格済（Agent tool の `model: "sonnet"` 指定で解決）。
 
-## 🟡 引き継ぎ事項（本セッション由来の残タスクなし）
+## 🟡 引き継ぎ事項（本セッション由来の残タスクなし・v313 backlog は未変化のまま繰り越し）
 
-本セッションはコードに一切触れておらず、gate 待ちの残タスクは無し。プロジェクト側の残 backlog は v313 時点のまま変化していない（Phase D S2-S5 の gate 判断待ち — 詳細は `handover_2026-07-01_v313_autopilot-mockup-guard.md` 参照）。
+本セッションはコードに一切触れておらず、本セッション発の残タスクは無い。ただし v313 時点の残バックログは**未着手のまま変化なし**なので、以下にそのまま明示的に carry forward する（詳細背景は `handover_2026-07-01_v313_autopilot-mockup-guard.md` 参照）:
+
+## 📊 残バックログ (v313 から繰り越し・本セッション未着手・推奨着手順)
+1. **PR #162 レビュー + merge** (draft・dev tooling のみ・低リスク)。
+2. **[gated] 監査台帳 `AUDIT_pane3_2026-07-01.md` (PR #155) の L0 #3-8/C10 訂正** — 訂正内容は main の `AUDIT_pane3-L0-fidelity_2026-07-01.md` に完全記載。**台帳変更は user gate**。#155 branch = `claude/pane3-phase-c-spec-rignjx`。
+3. **Phase D**: S2-S5 の gate 判断材料は v313 参照。推奨は **S3 (SAFE候補) → S4 (#117判断) → S2 (danger) → S5 (§38・6体)**。
+4. **[低優先]** 2-1 判定サマリー callout (現状維持推奨) / 微差。
 
 ## ⚠️ 触ると危険 / 検証規律 (CLAUDE.md 準拠・厳守、変更なし)
 - **danger zone**: 発光系 (`.panel-card`/`.bs-panel`/`.surface-card`) / gold accent / sticky検索バー / `index.css` / `StockPriceChart.jsx`（全文取込み禁止・grep+offset）。
