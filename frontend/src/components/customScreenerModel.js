@@ -155,9 +155,30 @@ export const EPS_YOY_MID_FACET = {
   unit: '%', tier: 'free', category: 'quality', delta: true,
   grades: { loose: 10, standard: 15 }, // 緩標≥10 / 厳最厳≥15 (object マッピングで段階解決)
 };
+// ─── 上昇トレンドフィルタ (A軸 = 下降トレンド除外) facet (SPEC_2026-07-02 screener-uptrend-filter) ──
+// 「静かな強さ」(quiet_quality) の落ちるナイフ/下降トレンド汚染 (PBR 等) を除外する opt-in override。
+//   真因 = RS 高止まり。PBR は反落中でも RS=80 で quiet_quality を通過 → post-spike falling knife が化ける。
+// signal: pv50 (価格の50DMA乖離%) + sl50 (50DMAの傾き%・21営業日)。compound facet:
+//   pv50 の下限閾値 (grades) を base に、厳/最厳は sl50 gate を custom pass で AND する。
+// ★ FUNDA_FACETS には入れない (activeFacets grade 行への誤露出回避・NEW_HIGH_SIGNAL_FACET と同型)。
+//   ★ PRESET_PREDICATES.quiet_quality.grades にも入れない = default OFF (cold-start 安全・ゼロ回帰)。
+//     user がスイッチ ON で override 経由算入。renderCrow guard で quiet_quality 限定描画。
+// grades = pv50 下限%。annotMap = 段毎の honest ラベル (厳/最厳の pv50 閾値は同値 ≥0 のため sl50 gate の
+//   差を明示して mseg 重複表示を回避・gradeAnnot 経由)。§38: pv50/sl50 は「50日線との位置・傾き」の
+//   観測事実。色 polarity なし・将来断定なし。null (nightly scan 前/履歴不足) = AND 除外 (honest)。
+export const UPTREND_FACET = {
+  key: 'uptrend',
+  field: 'pv50',
+  label: '上昇トレンド (50日線)',
+  labelShort: '上昇T',
+  tooltip: '株価が50日移動平均線に対してどの位置にあるか（乖離%）と50日線の傾き。緩/標は50日線からの下方乖離の許容幅（−8%/−3%以内）、厳/最厳は「50日線の上」かつ傾きが横ばい以上/上向きで、下降トレンド（落ちるナイフ）を除外します。',
+  unit: '%', tier: 'free', category: 'timing', delta: false,
+  grades: { loose: -8, standard: -3, strict: 0, severe: 0 },
+  annotMap: { loose: '50線−8%内', standard: '50線−3%内', strict: '50線上・傾横', severe: '50線上・傾↑' },
+};
 export const FACET_MAP = Object.fromEntries(
   [...FUNDA_FACETS, NEW_HIGH_SIGNAL_FACET, BUY_ZONE_G_FACET,
-   VS_SPY_FACET, RS_MID_BAND_FACET, ROE_LENIENT_FACET, EPS_YOY_MID_FACET].map((f) => [f.key, f])
+   VS_SPY_FACET, RS_MID_BAND_FACET, ROE_LENIENT_FACET, EPS_YOY_MID_FACET, UPTREND_FACET].map((f) => [f.key, f])
 );
 // preset の CORE 4 metric。volume/inst_holders は preset off、override で追加 (Pass 3c)。
 export const PRESET_CORE_KEYS = ['eps_yoy_pct', 'eps_cagr_3y', 'roe', 'rs_percentile'];
@@ -187,6 +208,9 @@ export function clampLevel(facet, level) {
 export function gradeAnnot(facet, lvl) {
   const thr = facet?.grades?.[lvl];
   if (thr == null) return '';
+  // annotMap: 段毎の custom ラベル (compound facet の honest 表示・uptrend の sl50 gate 可視化等)。
+  //   既存 facet は annotMap 未定義 = 無影響 (additive・SPEC_2026-07-02)。
+  if (facet.annotMap && facet.annotMap[lvl] != null) return facet.annotMap[lvl];
   if (facet.cmp === 'lte') return `≤${thr}${facet.unit || ''}`; // 上限型 (出来高 静か等)・以下で合致
   return `${facet.delta ? '+' : '≥'}${thr}${facet.unit || ''}`;
 }
@@ -390,6 +414,19 @@ export const PRESET_CONDS = [
   { key: 'rs_mid_band',      kind: 'grade',  facet: FACET_MAP.rs_mid_band,  pass: (item, lvl) => { const v = item.rs_percentile; const lo = FACET_MAP.rs_mid_band.grades[lvl]; return v != null && lo != null && v >= lo && v <= FACET_MAP.rs_mid_band.bandMax; } },
   // roe_lenient: ROE null 許容 (株主資本マイナス銘柄 = MAR/HLT を AND 除外しない)。null → pass、値あり → ≥ 閾値。
   { key: 'roe_lenient',      kind: 'grade',  facet: FACET_MAP.roe_lenient,  pass: (item, lvl) => { const v = item.roe; if (v == null) return true; const thr = FACET_MAP.roe_lenient.grades[lvl]; return thr == null || v >= thr; } },
+  // ── 上昇トレンドフィルタ (A軸) compound grade 条件 (SPEC_2026-07-02 screener-uptrend-filter) ──
+  //   pv50 下限 (grades) + 厳/最厳の sl50 gate を AND。null (pv50 測定外 = nightly scan 前/履歴不足) = 除外 (honest)。
+  //   quiet_quality の opt-in override (default OFF・PRESET_PREDICATES 非登録) のため cold-start でも既存挙動に無影響。
+  { key: 'uptrend',          kind: 'grade',  facet: FACET_MAP.uptrend,      pass: (item, lvl) => {
+    const pv = item.pv50;
+    if (pv == null) return false;                                        // 測定外 = AND 除外 (honest)
+    const thr = FACET_MAP.uptrend.grades[lvl];
+    if (thr == null) return true;                                        // 未定義段は no-op (clamp 済)
+    if (pv < thr) return false;                                          // pv50 下限 (緩−8 / 標−3 / 厳最厳 0)
+    if (lvl === 'strict') return item.sl50 != null && item.sl50 >= -2;   // 50日線上 かつ 傾き横ばい以上
+    if (lvl === 'severe') return item.sl50 != null && item.sl50 >= 1;    // 50日線上 かつ 傾き上向き
+    return true;                                                         // 緩/標 は pv50 のみ
+  } },
 ];
 export const COND_MAP = Object.fromEntries(PRESET_CONDS.map((c) => [c.key, c]));
 // binary/flag 条件のみ (extra フラグ経由で AND・itemPasses が走査)。grade は activeGrades 経由で別ループ。
@@ -464,7 +501,9 @@ export const CROW_LAYOUT = [
   //   activePreset!=='quiet_quality' で null を返すため、他 preset / custom mode には露出しない
   //   (≥型 volume_surge_pct と ≤型が並ぶ矛盾を構造的に回避・Trust Cliff)。RS の直後に置き RS→出来高静か の順。
   // rs_mid_band (範囲帯・custom 描画) / vs_spy (≥) は market_leading 専用 (renderCrow guard で他 preset 非露出)。
-  { group: 'タイミング', sub: '値動き・勢い',         keys: ['new_high_signal', 'buy_zone_g', 'buy_zone', 'new_high_52w', 'cup', 'rs_percentile', 'rs_mid_band', 'vs_spy', 'sector_leader', 'volume_surge_pct', 'volume_quiet'] },
+  // uptrend (上昇トレンドフィルタ A軸) も quiet_quality 専用 (renderCrow guard で他 preset 非露出)。RS の直後に置き
+  //   RS床→上昇トレンド→出来高静か の順で「強いのに落ちてない静かな株」の意味流れを作る (SPEC_2026-07-02)。
+  { group: 'タイミング', sub: '値動き・勢い',         keys: ['new_high_signal', 'buy_zone_g', 'buy_zone', 'new_high_52w', 'cup', 'rs_percentile', 'uptrend', 'rs_mid_band', 'vs_spy', 'sector_leader', 'volume_surge_pct', 'volume_quiet'] },
   // inst_qoq_calm (機関 殺到なし ≤) も quiet_quality 専用 (renderCrow guard 同上)。≥型 inst_holders_qoq_pct と非並置。
   { group: '需給',       sub: '機関の動き',           keys: ['ad_volume', 'inst_holders_qoq_pct', 'inst_qoq_calm'] },
 ];
@@ -511,7 +550,9 @@ export const PRESET_DISPLAY_CONDS = {
   //   + 収益の質(CF創出力/ROE)。gate なし (全 5 軸トグル可)。述語(PRESET_PREDICATES.quiet_quality.grades)と
   //   1:1 で隠れフィルタなし (invariant: applied ⊆ display)。volume_quiet/inst_qoq_calm は CROW_LAYOUT に
   //   追加済 = RENDERABLE (renderCrow が quiet_quality 限定で描画)。
-  quiet_quality:  ['rs_percentile', 'volume_quiet', 'inst_qoq_calm', 'ocf_margin_pct', 'roe'],
+  //   uptrend (上昇トレンドフィルタ A軸・SPEC_2026-07-02): opt-in override (default OFF・PRESET_PREDICATES 非登録)
+  //     のため applied ⊆ display invariant を壊さない (display に載せるが未適用時は AND に不参加)。RS 床の直後に配置。
+  quiet_quality:  ['rs_percentile', 'uptrend', 'volume_quiet', 'inst_qoq_calm', 'ocf_margin_pct', 'roe'],
   // 市場をリードし始めた銘柄 (SPEC_2026-06-28 market_leading): 述語適用6条件と 1:1 (隠れフィルタなし invariant)。
   //   rs_mid_band(範囲 gate 相当・必須) + vs_spy + ocf_margin_pct + roe_lenient + eps_yoy_mid (grades) + latest_beat (beatOnly gate)。
   market_leading: ['rs_mid_band', 'vs_spy', 'ocf_margin_pct', 'roe_lenient', 'eps_yoy_mid', 'latest_beat'],
