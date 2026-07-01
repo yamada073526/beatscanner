@@ -670,6 +670,7 @@ export default function JudgmentDetail({
                   hideVerdictChip={true}
                   hideEarningsRing={true}
                   hideEyebrow={true}
+                  lastUpdatedAt={detail?.lastAnalyzedAt}
                   frameless
                 />
               </VerdictHero>

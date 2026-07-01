@@ -534,7 +534,11 @@ export default function L1SummaryBuckets({
             data-testid={`${TESTID}-mini-rs`}
             aria-label="RSテクニカル詳細へ移動"
           >
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{rsLabel}</span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              {rsLabel}
+              {/* 監査 2-3 (正本 mockup §判定サマリー L305): RS の出典/母集団を明示 (IBD 準拠・対ユニバース)。§38 事実注記。 */}
+              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>（IBD・対ユニバース）</span>
+            </span>
             <span>
               <span style={{ fontSize: 15, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                 {rsDisplay}
