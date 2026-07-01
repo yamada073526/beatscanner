@@ -53,7 +53,7 @@ import { DetailInstanceTickerContext } from '../../primitives/DetailInstanceTick
 // v108 議題 5A (multi-review 5/5 verdict「release 前 mandatory」):
 // Forward P/E / PEG / 配当性向 / Buyback比率 を KpiStrip に追加するための fetcher。
 // 金商法 §38 / 景表法 §5 配慮で narration / 警告 chip なし、 数値のみ。
-import { fetchValuationExtras, fetchTechnical, TECHNICAL_CANONICAL_PATTERNS } from '../../../../api.js';
+import { fetchValuationExtras, fetchTechnical, TECHNICAL_CANONICAL_PATTERNS, fetchProfileExtended } from '../../../../api.js';
 import { classifyBuyZone } from '../../../../lib/buyZoneLabels.js';
 // Phase G Phase 3 (handover v99 §0-D): ChapterSection — 章 2-5 用 generic 章扉 (Noto Serif JP / gold hairline)。
 // headerOnly mode で content 再配置せず brand 一貫性 ([[feedback-gold-accent-continuity]]) を実現。
@@ -404,6 +404,21 @@ export default function JudgmentDetail({
     return () => { cancelled = true; };
   }, [selectedTicker]);
 
+  // 2026-07-01 user: L0 セクター pill 用の sector 供給。patterns.rs は sector を含まない
+  //   (rs_vs_spy_pct / self_percentile / ranking_label / period_months のみ) ため、company profile
+  //   (fetchProfileExtended.sector = raw FMP profile・LLM 不使用) から取得。ProfileCard も同 endpoint を
+  //   fetch するため dedup/cache で追加コスト最小。§38: 事実指標 (neutral 表示)。
+  const [profileSector, setProfileSector] = useState(null);
+  useEffect(() => {
+    setProfileSector(null); // ticker 切替時に他銘柄の残骸を出さない
+    if (!selectedTicker) return undefined;
+    let cancelled = false;
+    fetchProfileExtended(selectedTicker)
+      .then((p) => { if (!cancelled) setProfileSector(p?.sector || null); })
+      .catch(() => { if (!cancelled) setProfileSector(null); });
+    return () => { cancelled = true; };
+  }, [selectedTicker]);
+
   // v107 hotfix (React #310 fix): ch2Tab / ch3Tab useState は ALL early returns の前に置く必要。
   //   v105/v106 で JSX return 直前に置いていたが、 L338 `if (!selectedTicker)` early return より後ろのため
   //   初回 (selectedTicker=undefined) は hooks 2 個 skip、 2 回目 (set) で 2 個追加 → Rules of Hooks 違反。
@@ -663,7 +678,7 @@ export default function JudgmentDetail({
                   nextEarningsDate={detail?.nextEarningsDate}
                   price={detail?.price}
                   changePct={detail?.changePct}
-                  sector={technicalRs?.sector}
+                  sector={profileSector || technicalRs?.sector}
                   watchlist={detailContext?.watchlist}
                   onAddToWatchlist={detailContext?.onAddToWatchlist}
                   hideCountdownChip={false}
