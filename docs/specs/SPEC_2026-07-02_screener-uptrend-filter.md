@@ -88,3 +88,21 @@ handover は「quiet_quality の PRESET_PREDICATES に組込 **or** 独立 facet
 
 - **B 軸 (過熱除外の強化)**: 連続 +10%/日、pivot +5〜10% 上限。別 SPEC。
 - バリュー指標 (PER/PBR/配当) のコード化。表示 + gate は将来検討。
+
+## 8. 追記 (2026-07-02): market_leading への再利用 (PR #174 merge 後・user 指摘)
+
+PR #174 merge 後、user から「`market_leading`（市場をリードし始めた銘柄）にも同型の混入リスクがあるのでは」と指摘。検討の結果、**同一リスク構造**と判断し `uptrend` facet を再利用。
+
+### リスク分析
+
+`market_leading` の条件（`rs_mid_band` = RS中位帯45-75 / `vs_spy` = 直近6ヶ月の対SPY超過リターン ≥5〜8pt）は、いずれも**トレーリング（過去参照）指標**。quiet_quality の PBR 汚染（RS 高止まりで post-spike falling knife を通過）と同じ穴があり、「数ヶ月前に急騰しその後下降トレンドに転じた銘柄」が 6 ヶ月窓の超過リターンがプラスのまま残ることで通過し得る。
+
+`pv50`/`sl50`（銘柄自身の直近 50日線位置・傾き）は preset 非依存（backend で全銘柄に populate 済）の汎用シグナルのため、**同一 facet 定義をそのまま opt-in override として market_leading にも追加**。
+
+### 実装（バックエンド変更なし・フロントエンド追加のみ）
+
+- `customScreenerModel.js`: `PRESET_DISPLAY_CONDS.market_leading` に `uptrend` 追加。`PRESET_PREDICATES.market_leading.grades` は不変（default OFF 維持）。
+- `CustomScreenerPanel.jsx`: `renderCrow` の uptrend guard を quiet_quality 単独から `quiet_quality || market_leading` に拡張。
+- test: `PRESET_DISPLAY_CONDS.market_leading` の厳密 assertion 更新 + market_leading 専用の count==list / default-OFF test 追加。
+
+検証: `vitest` 157 pass（新規2件含む）/ `npm run build` exit 0。閾値（緩−8/標−3/厳0+sl50≥−2/最厳0+sl50≥+1）は quiet_quality と共通のものを流用（market_leading 専用の実データ較正は未実施・default OFF のため件数リスクなし）。
