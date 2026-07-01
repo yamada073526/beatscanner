@@ -224,6 +224,12 @@ ALLOWED-IMPORTANT: frontend/src/index.css  # .tier-l-glow hover hairline border 
 # 2026-06-14: KpiStrip 発光鎮静 (.kpi-strip-card) — is-arriving の border-color !important を
 # 打ち消し「静かなデータ帯」 化するため (§C-3 許可用途: is-arriving border-color)。light/dark。
 ALLOWED-IMPORTANT: frontend/src/index.css  # .bs-panel.kpi-strip-card.is-arriving border-color calm (light/dark)
+
+# Sprint S2 (C1、2026-07-01): L0 verdict-hero に他 17 panel と同じ gold top hairline (J1) を追加。
+# .is-glow-calm の border-color: transparent !important (2026-06-28 既存) が top の gold も消してしまう
+# ため、border-top-color を longhand で個別に !important 上書きし rest=hover を一致させる
+# (§C-3 許可用途: is-arriving/hover の border-color 系 !important を打ち消す目的)。light/dark。
+ALLOWED-IMPORTANT: frontend/src/index.css  # .verdict-hero.is-glow-calm border-top-color gold 保持 (light/dark)
 ALLOWED-IMPORTANT: frontend/src/index.css  # prefers-reduced-motion animation-duration override
 ALLOWED-IMPORTANT: frontend/src/index.css  # prefers-reduced-motion transition-duration override
 ALLOWED-IMPORTANT: frontend/src/index.css  # prefers-reduced-motion scroll-behavior override
