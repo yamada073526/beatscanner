@@ -105,11 +105,17 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     -|"") : ;;
     path:*)
       p="${impl_ref#path:}"
-      resolved="$(cd "$REPO" 2>/dev/null && realpath -m -- "$p" 2>/dev/null)"
-      case "$resolved" in
-        "$REPO"/*) [[ -f "$resolved" ]] || { row_fail=1; reason+="[impl] '$p' が実在しない(PHANTOM) "; } ;;
-        *) row_fail=1; reason+="[impl] '$p' は repo 外を指す(TRAVERSAL 拒否) " ;;
-      esac ;;
+      # 穴3: path traversal 拒否。GNU 専用の `realpath -m` は macOS BSD realpath で illegal option と
+      # なり resolved が空 → 全 path: が false TRAVERSAL 化していた (2026-07-01 macOS で判明・darwin が
+      # user の常用 platform)。realpath 非依存の portable 判定 (絶対 path / `..` セグメント拒否 +
+      # repo 相対の存在確認) に置換。
+      if [[ "$p" == /* ]]; then
+        row_fail=1; reason+="[impl] '$p' は絶対 path(TRAVERSAL 拒否) "
+      elif [[ "/$p/" == *"/../"* ]]; then
+        row_fail=1; reason+="[impl] '$p' が親参照 '..' を含む(TRAVERSAL 拒否) "
+      elif [[ ! -f "$REPO/$p" ]]; then
+        row_fail=1; reason+="[impl] '$p' が実在しない(PHANTOM) "
+      fi ;;
     grep:*)
       g="${impl_ref#grep:}"
       if is_generic "$g"; then

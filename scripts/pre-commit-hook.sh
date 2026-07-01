@@ -15,9 +15,12 @@
 #      messages.create) が staged されたら BLOCK (handover v82 Phase 3 で追加)
 #   4. backend/app/article_pipeline/*.py に LLM への数値計算指示が staged されたら BLOCK
 #      (v113 P1 追加、 article_pipeline は narration layer だが BAD-3 数値捏造直撃 zone)
+#   8. staged された *.claims.tsv (mockup-fidelity claim grounding) が verify-claims.sh に
+#      通らなければ BLOCK (v312+ 追加、 C10 台帳捏造事件の再発防止。exit 1 の doc 依存を機械強制へ)
 #
 # memory anchors:
 #   feedback_llm_calc_separation.md / feedback_citation_required.md
+#   feedback_diagram_quality_guard.md (C10 fabrication class)
 
 set -e
 
@@ -221,6 +224,51 @@ if [ -n "$STAGED_JSX" ]; then
             echo "  ↳ 参考: renderCrow 事件 (2026-06-23) — build は通るが dead code になっていた。"
             exit 1
         fi
+    fi
+fi
+
+# --- Check 8: mockup-fidelity claim grounding (*.claims.tsv) ---
+# 2026-07-01 C10 事件: 監査台帳が実在しない component (sections/L0IdentityBand.jsx) を基準に
+# mockup 状態まで hallucinate し "F (mockup 復元)" と誤分類した。verify-claims.sh (両辺 grep/find の
+# 非LLM grounding ゲート) は存在したが「doc 依存 (SKILL.md Phase 0 で回せ)」で機械強制が無かった。
+# ここで staged された claims 台帳 (*.claims.tsv) を commit 時に自動 grounding し、phantom/fabricated を BLOCK する。
+#
+# 規約: claims 台帳は `<name>.claims.tsv` で命名し、先頭付近に対応 mockup を宣言する:
+#         # mockup: docs/specs/mockups/<file>.html
+#       (fixture の example-claims.tsv は `-claims.tsv` = `.claims.tsv$` 非一致なので誤発火しない)
+STAGED_CLAIMS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.claims\.tsv$' || true)
+if [ -n "$STAGED_CLAIMS" ]; then
+    VERIFY_BIN="$(git rev-parse --show-toplevel)/.claude/skills/mockup-fidelity/scripts/verify-claims.sh"
+    if [ ! -f "$VERIFY_BIN" ]; then
+        echo "[pre-commit] WARN: $VERIFY_BIN が見つかりません。claim grounding をスキップします。"
+    else
+        for tsv in $STAGED_CLAIMS; do
+            [ -f "$tsv" ] || continue
+            # 対応 mockup を tsv 先頭の `# mockup:` ヘッダから解決 (最初の 1 行)
+            MOCKUP_REL=$(grep -m1 -E '^#[[:space:]]*mockup:' "$tsv" | sed -E 's/^#[[:space:]]*mockup:[[:space:]]*//' | tr -d '[:space:]')
+            if [ -z "$MOCKUP_REL" ]; then
+                echo "[pre-commit] BLOCKED: $tsv に mockup 宣言がありません"
+                echo "  ↳ claims 台帳は先頭付近に対応 mockup を宣言してください: '# mockup: docs/specs/mockups/<file>.html'"
+                echo "  ↳ 由来: C10 台帳捏造事件 (memory feedback_diagram_quality_guard.md)。"
+                echo "  ↳ 検証用の意図的混入なら --no-verify で迂回可。"
+                exit 1
+            fi
+            if [ ! -f "$MOCKUP_REL" ]; then
+                echo "[pre-commit] BLOCKED: $tsv が宣言する mockup '$MOCKUP_REL' が実在しません"
+                echo "  ↳ '# mockup:' の path を repo ルート相対で正しく指定してください。"
+                echo "  ↳ 検証用の意図的混入なら --no-verify で迂回可。"
+                exit 1
+            fi
+            # verify-claims.sh を実行 (set -e 下でも if ! で errexit を無効化して捕捉)
+            if ! VERIFY_OUT=$(bash "$VERIFY_BIN" "$MOCKUP_REL" "$tsv" 2>&1); then
+                echo "[pre-commit] BLOCKED: $tsv の claim grounding に失敗しました (verify-claims.sh)"
+                echo "$VERIFY_OUT" | sed 's/^/    /'
+                echo "  ↳ FAIL = 主張が ground-truth に無い (phantom/fabricated)。台帳を root-cause 再検証してください。"
+                echo "  ↳ WARN(exit 3) = pattern が汎用的で主張対象を一意特定できていない → 具体化して再実行。"
+                echo "  ↳ 検証用の意図的混入なら --no-verify で迂回可。"
+                exit 1
+            fi
+        done
     fi
 fi
 
