@@ -13206,6 +13206,35 @@ def _compute_sma(closes: list[float], period: int) -> list[float | None]:
     return result
 
 
+def _compute_pv50_sl50(closes: list[float]) -> tuple[float | None, float | None]:
+    """スクリーナー上昇トレンドフィルタ (A軸) の 2 signal を算出。
+
+    - pv50 = 価格の 50DMA 乖離% = (last_close - sma50[-1]) / sma50[-1] * 100
+        下降トレンド (落ちるナイフ) は 50DMA を大きく下回る = pv50 が大きくマイナス。
+    - sl50 = 50DMA の傾き% (21 営業日) = (sma50[-1] - sma50[-22]) / sma50[-22] * 100
+        上昇トレンド = プラス、下降 = マイナス。
+
+    SPEC: docs/specs/SPEC_2026-07-02_screener-uptrend-filter.md。
+    データ不足 (50 営業日未満 = pv50 不可 / 71 営業日未満 = sl50 不可) / ゼロ除算は
+    None を返す (honest・500 させない)。frontend は None を AND 除外 (測定外)。
+    """
+    if not closes or len(closes) < 50:
+        return None, None
+    sma50 = _compute_sma(closes, 50)
+    last_sma = sma50[-1] if sma50 else None
+    last_close = closes[-1] if closes else None
+    pv50: float | None = None
+    if last_sma is not None and last_sma > 0 and last_close is not None:
+        pv50 = round((last_close - last_sma) / last_sma * 100, 2)
+    sl50: float | None = None
+    # 21 営業日前の SMA50 と比較 (52 営業日以上の close が必要: sma50[-22] が非 None)。
+    if len(sma50) >= 22:
+        prev_sma = sma50[-22]
+        if prev_sma is not None and prev_sma > 0 and last_sma is not None:
+            sl50 = round((last_sma - prev_sma) / prev_sma * 100, 2)
+    return pv50, sl50
+
+
 def _get_spy_history() -> dict | None:
     """SPY daily history (3y) を 24h cache で fetch。
 
@@ -18126,6 +18155,10 @@ async def cron_rs_scan(
                 result = _compute_rs(t_closes, spy_closes)
                 if result.get("rs_vs_spy_pct") is None:
                     return ticker, None, None, "compute_rs_returned_none"
+                # 上昇トレンドフィルタ A軸: pv50/sl50 を closes から追加算出 (SPEC 2026-07-02)。
+                _pv50, _sl50 = _compute_pv50_sl50(t_closes)
+                result["pv50"] = _pv50
+                result["sl50"] = _sl50
                 gc = _detect_gc_inline(t_closes, t_times)
                 return ticker, result, gc, None
 
@@ -18138,6 +18171,8 @@ async def cron_rs_scan(
                 "ticker": ticker,
                 "rs_vs_spy_pct": float(result["rs_vs_spy_pct"]),
                 "self_percentile": result.get("self_percentile"),
+                "pv50": result.get("pv50"),
+                "sl50": result.get("sl50"),
             })
             if gc:
                 raw_gc.append({"ticker": ticker, "cross_date": gc["cross_date"], "days_ago": gc["days_ago"]})
@@ -18156,10 +18191,16 @@ async def cron_rs_scan(
             if result.get("rs_vs_spy_pct") is None:
                 failed.append({"ticker": ticker, "reason": "compute_rs_returned_none"})
                 continue
+            # 上昇トレンドフィルタ A軸: pv50/sl50 を closes から追加算出 (SPEC 2026-07-02)。
+            _pv50, _sl50 = _compute_pv50_sl50(t_closes)
+            result["pv50"] = _pv50
+            result["sl50"] = _sl50
             raw_rs.append({
                 "ticker": ticker,
                 "rs_vs_spy_pct": float(result["rs_vs_spy_pct"]),
                 "self_percentile": result.get("self_percentile"),
+                "pv50": result.get("pv50"),
+                "sl50": result.get("sl50"),
             })
             gc = _detect_gc_inline(t_closes, t_times)
             if gc:
@@ -18215,6 +18256,8 @@ async def cron_rs_scan(
                     "self_percentile": r.get("self_percentile"),
                     "universe_percentile": r["universe_percentile"],
                     "delta_1d_percentile": delta,  # v125 Sprint 2.5 新規 (migration 2026-05-28)
+                    "pv50": r.get("pv50"),  # 上昇トレンドフィルタ A軸 (migration 2026-07-02)
+                    "sl50": r.get("sl50"),
                     "period_months": 6,
                 })
             if rows:
@@ -18236,10 +18279,18 @@ async def cron_rs_scan(
                     # 「delta_1d_percentile column not exists」 を graceful 検知、 該当 key を drop して再 upsert。
                     # user が migration を Supabase SQL Editor で apply するまでの bridge。
                     err_msg = str(inner_e).lower()
-                    if "delta_1d_percentile" in err_msg or "column" in err_msg:
-                        print(f"[cron_rs_scan] delta_1d_percentile column 不在、 fallback without delta: {inner_e}")
+                    if (
+                        "delta_1d_percentile" in err_msg
+                        or "pv50" in err_msg
+                        or "sl50" in err_msg
+                        or "column" in err_msg
+                    ):
+                        # migration 未適用の任意カラム (delta_1d=2026-05-28 / pv50,sl50=2026-07-02) を
+                        # drop して base schema のみで再 upsert。user が Supabase SQL Editor で apply するまでの bridge。
+                        print(f"[cron_rs_scan] optional column 不在、 fallback without delta/pv50/sl50: {inner_e}")
+                        _optional_cols = ("delta_1d_percentile", "pv50", "sl50")
                         rows_no_delta = [
-                            {k: v for k, v in r.items() if k != "delta_1d_percentile"}
+                            {k: v for k, v in r.items() if k not in _optional_cols}
                             for r in rows
                         ]
                         _rs_upsert_retry(rows_no_delta)
@@ -20997,6 +21048,19 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
             t = str(r.get("ticker") or "").upper()
             if t:
                 rs_map[t] = r
+    # 上昇トレンドフィルタ A軸 (pv50/sl50) — rs_ratings 由来 = rs と同源 (SPEC 2026-07-02)。
+    #   ★ feedback_paged_select_missing_column_trap 回避: 共有 SELECT に混ぜず独立 fetch。
+    #     migration (2026-07-02_rs_ratings_pv50_sl50.sql) 未適用なら _fetch_all_rows_paged が例外を
+    #     握り空 list → pv50/sl50 のみ None (既存 rs percentile は無傷)。0 FMP call (Supabase read のみ)。
+    freshness["pv50"] = rs_cd
+    if rs_cd:
+        for r in _fetch_all_rows_paged(
+            sb, "rs_ratings", "ticker,pv50,sl50", eq={"calc_date": rs_cd},
+        ):
+            t = str(r.get("ticker") or "").upper()
+            if t and t in rs_map:
+                rs_map[t]["pv50"] = r.get("pv50")
+                rs_map[t]["sl50"] = r.get("sl50")
 
     # pattern_signals cup_handle (Premium) — 直近 7 日、 per-ticker 最新
     # buy-quality Sprint 2: #3 pivot_distance_pct 算出のため payload も SELECT 追加。
@@ -21101,6 +21165,9 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
             # RS (free) — 測定外は null
             "rs_percentile": (rs or {}).get("universe_percentile"),
             "rs_vs_spy_pct": _uni_round((rs or {}).get("rs_vs_spy_pct")),
+            # 上昇トレンドフィルタ A軸 (free) — pv50=50日線乖離%, sl50=50日線傾き%(21営業日)。測定外=null(AND除外)。
+            "pv50": _uni_round((rs or {}).get("pv50")),
+            "sl50": _uni_round((rs or {}).get("sl50")),
             # ファンダ 5 条件 pass (free) — tri-state: True/False/None(測定外)
             "funda_pass": funda_eval.get(tk),
             # CAN-SLIM 数値 (free) — sf 欠落=測定外 null (false と区別)

@@ -690,7 +690,7 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     //   quiet_quality 以外 (custom mode = activePreset null 含む) では描かない。custom mode で
     //   ≥型 (出来高急増 / 機関保有増) と ≤型が同 group に並ぶ矛盾露出を構造的に防ぐ (Trust Cliff)。
     //   quiet_quality のときは下の汎用 grade crow (gradeAnnot が ≤ 閾値を描画) へ素通し。
-    if (cond.key === 'volume_quiet' || cond.key === 'inst_qoq_calm') {
+    if (cond.key === 'volume_quiet' || cond.key === 'inst_qoq_calm' || cond.key === 'uptrend') {
       if (activePreset !== 'quiet_quality') return null;
     }
     // ── 「市場をリードし始めた銘柄」専用 facet ガード (SPEC_2026-06-28 market_leading) ──
