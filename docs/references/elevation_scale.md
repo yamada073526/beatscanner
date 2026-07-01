@@ -229,7 +229,9 @@ ALLOWED-IMPORTANT: frontend/src/index.css  # .bs-panel.kpi-strip-card.is-arrivin
 # .is-glow-calm の border-color: transparent !important (2026-06-28 既存) が top の gold も消してしまう
 # ため、border-top-color を longhand で個別に !important 上書きし rest=hover を一致させる
 # (§C-3 許可用途: is-arriving/hover の border-color 系 !important を打ち消す目的)。light/dark。
-ALLOWED-IMPORTANT: frontend/src/index.css  # .verdict-hero.is-glow-calm border-top-color gold 保持 (light/dark)
+# followup (2026-07-01 user dogfood): 上辺のみ→全辺 gold に拡張。border-color 自体を transparent でなく
+# gold-mix !important にし、rest(全辺gold)と calm/hover を完全一致させる。light/dark。
+ALLOWED-IMPORTANT: frontend/src/index.css  # .verdict-hero.is-glow-calm border-color / border-top-color gold 保持 (light/dark)
 ALLOWED-IMPORTANT: frontend/src/index.css  # prefers-reduced-motion animation-duration override
 ALLOWED-IMPORTANT: frontend/src/index.css  # prefers-reduced-motion transition-duration override
 ALLOWED-IMPORTANT: frontend/src/index.css  # prefers-reduced-motion scroll-behavior override
