@@ -7285,6 +7285,12 @@ async def guidance_quarterly_history(ticker: str, request: Request, limit: int =
     if not history or all(h.get("eps_actual") is None and h.get("revenue_actual") is None for h in history):
         raise HTTPException(status_code=404, detail=f"{sym} の四半期履歴が見つかりません")
 
+    # ── Sprint 4c (S1): 各四半期 history 行に「発表時点コンセンサス比ガイダンス verdict」を注入 ──
+    # 良い決算 3 点目 (ガイダンス beat) の材料。既存純粋関数 classify_pit_consensus を流用 (LLM 不使用・
+    # §38 は事実の方向分類のみ)。蓄積が疎/前向きのみのため過去期の大半は available:false で 2 点 fallback
+    # (捏造しない)。S2 で _is_good_quarter の 3 点目に結線予定 (本 sprint は注入のみ)。
+    _enrich_history_guidance_verdict(sym, history)
+
     # ── Sprint 4a (Pane3 mockup v4 §WS2): 「良い決算 N 期連続」 + EPS YoY 加速/減速 ──
     # 数値物理層 = Python のみ (LLM 不使用、 HG 4 層 BAD-3 数値捏造防止)。 history は newest-first
     # (surprises_sorted = date 降順) のため先頭 [0]=直近 から連続を数える。
@@ -18734,6 +18740,87 @@ def _enrich_forward_guidance_history(ticker: str, forward: dict) -> None:
             if prow:
                 pit = guidance_history.classify_pit_consensus(latest, prow)
         blk["guidance_pit_consensus"] = pit
+
+
+def _enrich_history_guidance_verdict(ticker: str, history: list[dict]) -> None:
+    """Sprint 4c (S1): 各四半期 history 行に「発表時点コンセンサス比ガイダンス verdict」を注入する。
+
+    良い決算 3 点目 (ガイダンス beat) の材料。各決算発表時に会社が示した次期ガイダンスが、
+    その時点コンセンサスを上回ったか (above/inline/below)。分類は aggregator/guidance_history の
+    純粋関数 classify_pit_consensus (LLM 不使用・§38 は事実の方向分類のみ・未来側 snapshot 二重防御)。
+    データ源: guidance_snapshots (per-filing 履歴) + consensus_snapshots (発表日以前で最新)。
+    蓄積が疎/前向きのみのため、過去期の大半は available:false で 2 点 fallback (捏造しない・前向き専用)。
+    sb 不在 / 例外 / 蓄積不足 / マッチ無しは available=False (graceful)。history を in-place mutate。
+    """
+    empty = {"eps": "unknown", "rev": "unknown", "pit_snapshot_date": None, "available": False, "stale": False}
+    for h in history:
+        h["guidance_verdict"] = dict(empty)  # 既定は honest な unknown (捏造ゼロ)
+
+    sb = _get_supabase_service()
+    if sb is None or not history:
+        return
+    from datetime import date as _date
+    from .aggregator import guidance_history
+
+    def _pd(s):
+        try:
+            y, m, d = (int(x) for x in str(s)[:10].split("-"))
+            return _date(y, m, d)
+        except (ValueError, TypeError):
+            return None
+
+    # ticker の全ガイダンス row を 1 回で取得 (疎: 銘柄あたり数行、N+1 回避)。
+    try:
+        gres = (
+            sb.table("guidance_snapshots").select(
+                "filed_at,captured_at,period_end_date,period_type,"
+                "eps_low,eps_high,eps_basis,rev_low,rev_high,rev_basis"
+            ).eq("ticker", ticker).execute()
+        )
+        grows = [r for r in (gres.data or []) if r.get("filed_at")]
+    except Exception:
+        grows = []
+    if not grows:
+        return
+
+    # 決算発表日 (history.date = FMP earnings の発表日) に filed_at が最も近い guidance を採る。
+    # 決算とガイダンスは同時発表 → |Δ| ≤ _MATCH_DAYS。四半期間隔 90 日に対し 14 日は隣の四半期を
+    # 誤マッチしない安全マージン (決算時ガイダンスのみ捕捉、途中の追加 filing は拾わない)。
+    _MATCH_DAYS = 14
+    for h in history:
+        cur = _pd(h.get("date"))
+        if cur is None:
+            continue
+        best = None
+        best_delta = None
+        for g in grows:
+            gd = _pd(g.get("filed_at"))
+            if gd is None:
+                continue
+            delta = abs((gd - cur).days)
+            if delta <= _MATCH_DAYS and (best_delta is None or delta < best_delta):
+                best, best_delta = g, delta
+        if best is None:
+            continue
+        ped = best.get("period_end_date")
+        ptype = best.get("period_type")
+        if not ped or not ptype:
+            continue
+        # その guidance の対象会計期の、発表日以前で最新の consensus を PIT に採る
+        # (未来側 snapshot は SQL の .lt() + 純粋関数側で二重防御、look-ahead bias 防止・§10 条件5)。
+        try:
+            pres = (
+                sb.table("consensus_snapshots").select(
+                    "snapshot_date,estimated_eps_avg,estimated_revenue_avg"
+                ).eq("ticker", ticker).eq("fiscal_date", ped).eq("period_type", ptype)
+                .lt("snapshot_date", str(best.get("filed_at"))[:10])
+                .order("snapshot_date", desc=True).limit(1).execute()
+            )
+            prow = (pres.data or [None])[0]
+        except Exception:
+            prow = None
+        if prow:
+            h["guidance_verdict"] = guidance_history.classify_pit_consensus(best, prow)
 
 
 @app.post("/api/cron/guidance-snapshot")
