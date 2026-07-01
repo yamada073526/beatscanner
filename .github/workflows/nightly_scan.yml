@@ -346,7 +346,7 @@ jobs:
           # mega_null/mega_tot/銘柄別詳細を megacap-coverage-snapshot へ POST し履歴化するだけの追加
           # (universe fetch/cfps 再計算なし)。best-effort: 失敗しても $fail は変えない (freshness gate 本体の
           # 判定 = 上の if/elif に一切影響させない)。
-          details_json=$(printf '%s' "$mega_pairs" | jq -R -s '
+          details_json=$(printf '%s' "$mega_pairs" | jq -R -s -c '
             split("\n") | map(select(length>0)) | map(split("=")) |
             map({(.[0]): (if .[1]=="null" then null else (.[1]|tonumber) end)}) | add // {}
           ' 2>/dev/null || echo '{}')
