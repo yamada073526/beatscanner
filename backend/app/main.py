@@ -23000,6 +23000,105 @@ async def cron_canslim_warmup(
     }
 
 
+@app.post("/api/cron/megacap-coverage-snapshot")
+async def cron_megacap_coverage_snapshot(
+    body: dict | None = None,
+    x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
+):
+    """chunk-0 mega-cap coverage (freshness gate) の毎晩の欠落数を履歴として永続化する cron。
+
+    nightly_scan.yml の freshness gate (chunk-0 mega-cap cfps coverage) は毎晩 pass/fail を
+    その場で判定するだけで結果を捨てていた (GITHUB_STEP_SUMMARY にしか残らない)。本 endpoint は
+    その日の判定結果 (欠落数・銘柄別詳細) を megacap_coverage_history へ永続化し、
+    「hard-fail (mega_null>=4) しない程度の緩やかな劣化 (1-3 件が連日続く等)」を後から
+    追跡可能にする (handover v309 backlog、 user 承認 2026-07-01)。
+
+    universe fetch や cfps 計算は一切行わない。 GHA 側で既に計算済みの値を受け取って保存するだけ
+    (per-ticker upsert / null_reasons / cfps 純関数には一切触れない)。
+
+    Body (必須):
+      run_date: str (YYYY-MM-DD) — 対象 nightly run の日付 (未指定なら本日日付)
+      details: dict[str, float|None] — ticker -> cfps_eps_ratio (欠落は null)
+      universe_size: int — freshness gate が見た universe_size (通常 3000、 文脈記録用)
+
+    Returns:
+      ok, run_date, mega_null, mega_total
+    """
+    _check_cron_secret(x_cron_secret)
+
+    sb = _get_supabase_service()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="Supabase service not configured")
+
+    body = body or {}
+    run_date = str(body.get("run_date") or date.today().isoformat())
+    details_raw = body.get("details")
+    details = details_raw if isinstance(details_raw, dict) else {}
+    universe_size = int(body.get("universe_size") or 0) or None
+
+    mega_total = len(details)
+    mega_null = sum(1 for v in details.values() if v is None)
+
+    def _upsert() -> None:
+        sb.table("megacap_coverage_history").upsert(
+            {
+                "run_date": run_date,
+                "universe_size": universe_size,
+                "mega_null": mega_null,
+                "mega_total": mega_total,
+                "details": details,
+            },
+            on_conflict="run_date",
+        ).execute()
+
+    await asyncio.to_thread(_upsert)
+
+    return {
+        "ok": True,
+        "run_date": run_date,
+        "mega_null": mega_null,
+        "mega_total": mega_total,
+    }
+
+
+@app.get("/api/cron/megacap-coverage-history")
+async def cron_megacap_coverage_history(
+    days: int = 30,
+    x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
+):
+    """megacap-coverage-snapshot が蓄積した欠落履歴を新しい順で返す (運用観察用の読み取り専用 endpoint)。
+
+    「hard-fail (mega_null>=4) しない緩やかな劣化」 を目視で追える形で返す
+    (例: 同一銘柄が複数日連続で null なら watch)。 frontend / user 向け UI は持たない
+    (§38/景表法対象外の内部運用データ、 curl + jq での確認を前提)。
+    """
+    _check_cron_secret(x_cron_secret)
+
+    sb = _get_supabase_service()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="Supabase service not configured")
+
+    days = max(1, min(365, days))
+
+    def _fetch() -> list[dict]:
+        res = (
+            sb.table("megacap_coverage_history")
+            .select("run_date,universe_size,mega_null,mega_total,details,created_at")
+            .order("run_date", desc=True)
+            .limit(days)
+            .execute()
+        )
+        return res.data or []
+
+    rows = await asyncio.to_thread(_fetch)
+
+    return {
+        "ok": True,
+        "days_requested": days,
+        "rows": rows,
+    }
+
+
 @app.post("/api/cron/canslim-scan")
 async def cron_canslim_scan(
     body: dict | None = None,
