@@ -18,6 +18,20 @@ import hmac
 import os
 from typing import Iterable
 
+# メール構造色 SSOT (hex 直書き禁止・CLAUDE.md)。決算メール (earnings_mailer.py) と同一の
+# ダーク基調に揃えるため mail_color_constants を流用 (2 つの BeatScanner メールでトーンを統一)。
+from .mail_color_constants import (
+    BORDER_SUBTLE,
+    CTA_BG_COLOR,
+    CTA_TEXT_COLOR,
+    MAIL_BG_DARK,
+    MAIL_CARD_BG_DARK,
+    TEXT_MUTED,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
+    TEXT_SUBTLE,
+)
+
 
 # RFC 8058 List-Unsubscribe 用 HMAC token (handover v80 Phase B §9-6)
 # CRON_SECRET を流用 (新 env var 追加不要、 secret 未設定環境では全 token 拒否で fail-safe)
@@ -80,14 +94,14 @@ SUBJECT_TEMPLATE = "📊 BeatScanner: 今日注目の Leader + Breakout {count} 
 MAIL_FROM_DEFAULT = "BeatScanner Signals <signals@beatscanner.app>"
 
 # 金商法 免責文 (Security verdict: 投資助言業 該当回避、 footer 必須)
-DISCLAIMER_HTML = """\
-<hr style="border:none;border-top:1px solid #eee;margin:24px 0 12px;">
-<p style="color:#888;font-size:11px;line-height:1.6;">
+DISCLAIMER_HTML = f"""\
+<hr style="border:none;border-top:1px solid {BORDER_SUBTLE};margin:24px 0 12px;">
+<p style="color:{TEXT_SUBTLE};font-size:11px;line-height:1.6;">
 本メールは情報提供サービスです。 投資助言業ではなく、 個別銘柄の売買推奨ではありません。
 ファンダメンタル 5 条件 PASS および Cup-with-Handle パターン形成は客観的な検出結果であり、
 投資判断は読者ご自身で行ってください。 過去のパターンが将来の値動きを保証するものではありません。
 <br><br>
-配信停止は <a href="https://beatscanner-production.up.railway.app/?tab=notifications" style="color:#888;">通知設定</a> から。
+配信停止は <a href="https://beatscanner-production.up.railway.app/?tab=notifications" style="color:{TEXT_SUBTLE};">通知設定</a> から。
 </p>
 """
 
@@ -133,14 +147,14 @@ def _build_digest_html(transitions: list[dict]) -> str:
         analysis_url = f"https://beatscanner-production.up.railway.app/?ticker={ticker}"
         rows.append(f"""
 <tr>
-  <td style="padding:12px 8px;border-bottom:1px solid #eee;">
-    <div style="font-weight:600;font-size:16px;color:#222;">{ticker}</div>
-    <div style="color:#666;font-size:13px;margin-top:2px;">{tlabel}</div>
-    <div style="color:#444;font-size:13px;margin-top:4px;">Pivot: <strong>{pivot_str}</strong></div>
-    <div style="color:#444;font-size:13px;">ファンダ 5 条件: <strong>PASS (5/5)</strong></div>
+  <td style="padding:12px 8px;border-bottom:1px solid {BORDER_SUBTLE};">
+    <div style="font-weight:600;font-size:16px;color:{TEXT_PRIMARY};">{ticker}</div>
+    <div style="color:{TEXT_MUTED};font-size:13px;margin-top:2px;">{tlabel}</div>
+    <div style="color:{TEXT_SECONDARY};font-size:13px;margin-top:4px;">Pivot: <strong>{pivot_str}</strong></div>
+    <div style="color:{TEXT_SECONDARY};font-size:13px;">ファンダ 5 条件: <strong>PASS (5/5)</strong></div>
   </td>
-  <td style="padding:12px 8px;border-bottom:1px solid #eee;text-align:right;vertical-align:middle;">
-    <a href="{analysis_url}" style="background:#0a84ff;color:#fff;text-decoration:none;padding:8px 16px;border-radius:6px;font-size:13px;font-weight:500;display:inline-block;">分析を見る</a>
+  <td style="padding:12px 8px;border-bottom:1px solid {BORDER_SUBTLE};text-align:right;vertical-align:middle;">
+    <a href="{analysis_url}" style="background:{CTA_BG_COLOR};color:{CTA_TEXT_COLOR};text-decoration:none;padding:8px 16px;border-radius:6px;font-size:13px;font-weight:500;display:inline-block;">分析を見る</a>
   </td>
 </tr>
 """)
@@ -150,14 +164,23 @@ def _build_digest_html(transitions: list[dict]) -> str:
     return f"""\
 <!DOCTYPE html>
 <html lang="ja">
-<head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#f7f7f8;font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f7f7f8;padding:24px 0;">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="dark light">
+  <style>
+    @media (prefers-color-scheme: dark) {{
+      .email-wrapper {{ background-color: {MAIL_BG_DARK} !important; }}
+      .email-card {{ background-color: {MAIL_CARD_BG_DARK} !important; }}
+    }}
+  </style>
+</head>
+<body style="margin:0;padding:0;background:{MAIL_BG_DARK};font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" class="email-wrapper" style="background:{MAIL_BG_DARK};padding:24px 0;">
   <tr><td align="center">
-    <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;padding:32px;max-width:92%;">
+    <table width="600" cellpadding="0" cellspacing="0" class="email-card" style="background:{MAIL_CARD_BG_DARK};border-radius:12px;padding:32px;max-width:92%;">
       <tr><td>
-        <h1 style="margin:0 0 8px;font-size:20px;color:#222;font-weight:600;">本日のシグナル ({count} 件)</h1>
-        <p style="margin:0 0 20px;color:#666;font-size:14px;line-height:1.6;">
+        <h1 style="margin:0 0 8px;font-size:20px;color:{TEXT_PRIMARY};font-weight:600;">本日のシグナル ({count} 件)</h1>
+        <p style="margin:0 0 20px;color:{TEXT_MUTED};font-size:14px;line-height:1.6;">
           ファンダ 5 条件 PASS かつ Cup-with-Handle パターンに動きがあった銘柄をお届けします。
         </p>
         <table width="100%" cellpadding="0" cellspacing="0">
@@ -271,13 +294,13 @@ def _build_article_digest_html(articles: list[dict]) -> str:
         url = _article_url(slug)
         rows.append(f"""
 <tr>
-  <td style="padding:14px 8px;border-bottom:1px solid #eee;">
-    <div style="color:#888;font-size:12px;letter-spacing:0.02em;margin-bottom:4px;">{meta}</div>
-    <div style="font-weight:600;font-size:16px;color:#222;line-height:1.4;">{title}</div>
-    <div style="color:#666;font-size:13px;margin-top:4px;line-height:1.6;">{subtitle}</div>
+  <td style="padding:14px 8px;border-bottom:1px solid {BORDER_SUBTLE};">
+    <div style="color:{TEXT_SUBTLE};font-size:12px;letter-spacing:0.02em;margin-bottom:4px;">{meta}</div>
+    <div style="font-weight:600;font-size:16px;color:{TEXT_PRIMARY};line-height:1.4;">{title}</div>
+    <div style="color:{TEXT_MUTED};font-size:13px;margin-top:4px;line-height:1.6;">{subtitle}</div>
   </td>
-  <td style="padding:14px 8px;border-bottom:1px solid #eee;text-align:right;vertical-align:middle;">
-    <a href="{url}" style="background:#0a84ff;color:#fff;text-decoration:none;padding:8px 16px;border-radius:6px;font-size:13px;font-weight:500;display:inline-block;">記事を読む</a>
+  <td style="padding:14px 8px;border-bottom:1px solid {BORDER_SUBTLE};text-align:right;vertical-align:middle;">
+    <a href="{url}" style="background:{CTA_BG_COLOR};color:{CTA_TEXT_COLOR};text-decoration:none;padding:8px 16px;border-radius:6px;font-size:13px;font-weight:500;display:inline-block;">記事を読む</a>
   </td>
 </tr>
 """)
@@ -287,14 +310,23 @@ def _build_article_digest_html(articles: list[dict]) -> str:
     return f"""\
 <!DOCTYPE html>
 <html lang="ja">
-<head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#f7f7f8;font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f7f7f8;padding:24px 0;">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="dark light">
+  <style>
+    @media (prefers-color-scheme: dark) {{
+      .email-wrapper {{ background-color: {MAIL_BG_DARK} !important; }}
+      .email-card {{ background-color: {MAIL_CARD_BG_DARK} !important; }}
+    }}
+  </style>
+</head>
+<body style="margin:0;padding:0;background:{MAIL_BG_DARK};font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" class="email-wrapper" style="background:{MAIL_BG_DARK};padding:24px 0;">
   <tr><td align="center">
-    <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;padding:32px;max-width:92%;">
+    <table width="600" cellpadding="0" cellspacing="0" class="email-card" style="background:{MAIL_CARD_BG_DARK};border-radius:12px;padding:32px;max-width:92%;">
       <tr><td>
-        <h1 style="margin:0 0 8px;font-size:20px;color:#222;font-weight:600;">本日の厳選記事 ({count} 本)</h1>
-        <p style="margin:0 0 20px;color:#666;font-size:14px;line-height:1.6;">
+        <h1 style="margin:0 0 8px;font-size:20px;color:{TEXT_PRIMARY};font-weight:600;">本日の厳選記事 ({count} 本)</h1>
+        <p style="margin:0 0 20px;color:{TEXT_MUTED};font-size:14px;line-height:1.6;">
           独自プロトコルで生成した最新記事をお届けします。 出典確認・両論併記・誇張排除の 4 段品質チェックを通過しました。
         </p>
         <table width="100%" cellpadding="0" cellspacing="0">
