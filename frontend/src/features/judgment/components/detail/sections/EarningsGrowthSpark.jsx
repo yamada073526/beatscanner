@@ -54,7 +54,7 @@ const ACCEL_META = {
   decelerating: { icon: '↘', label: '減速', color: 'var(--color-warning)' },
 };
 
-// 上部 summary 行の小型 chip（EpsBeatStreakChip と同 idiom: pill / 12% bg / 45% border）。
+// 上部 summary 行の小型 chip（既存の小型 chip と同 idiom: pill / 12% bg / 45% border）。
 function SummaryChip({ color, title, ariaLabel, testid, children }) {
   return (
     <span

@@ -182,7 +182,7 @@ export default function EarningsThreePoint({ guidance, isLoading = false, beatSt
       )}
 
       {/* mockup .goodq (pane3-full-v5.html L330): 「良い決算」連続期数バナー。streak>=2 のみ表示
-          (1期は anchor として弱い + noise、EpsBeatStreakChip 等既存 chip と同基準)。
+          (1期は anchor として弱い + noise、既存 chip と同基準)。
           §38: 過去事実の「回数」のみ、将来予測・買い推奨なし。文言は mockup の「EPS+売上+ガイダンス」
           でなく実装が実際に判定する「EPS+売上」の2点に忠実 (backend beat_streak はガイダンス3点目を
           guidance_snapshots 8Q backfill 後に拡張予定・Sprint 4c DEFER。3点と謳うと実態より厳格な
