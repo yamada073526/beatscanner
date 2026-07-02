@@ -13241,6 +13241,36 @@ def _compute_pv50_sl50(closes: list[float]) -> tuple[float | None, float | None]
     return pv50, sl50
 
 
+def _compute_drawdown_runup(closes: list[float], n: int = 60) -> tuple[float | None, float | None]:
+    """スクリーナー過熱除外フィルタ (B軸) の 2 signal を算出。
+
+    - dd60 = 直近 n 営業日高値からの下落率% = (last_close - peak) / peak * 100
+        「既に高値から大きく落ちた」状態を測る (0 = 現在が高値、マイナスが大きいほど下落深い)。
+    - runup60 = その高値に至るまでの直近 n 営業日の上昇率% = (peak - trough) / trough * 100
+        「その高値がどれだけ急騰して作られたか」を測る (吹き上げ度)。
+
+    SPEC: docs/specs/SPEC_2026-07-02_screener-overheat-exclusion-b-axis.md。
+    Sprint 1 実データ較正 (2026-07-02, GH Actions workflow_dispatch) と完全に同一の算出式。
+    データ不足 (5 本未満) / ゼロ除算は None を返す (honest・500 させない)。
+    frontend は None を AND 除外 (測定外)。
+    """
+    if not closes or len(closes) < 5:
+        return None, None
+    window = closes[-n:] if len(closes) >= n else closes[:]
+    peak = max(window)
+    last = closes[-1]
+    if peak <= 0:
+        return None, None
+    dd = round((last - peak) / peak * 100, 2)
+    peak_local_idx = window.index(peak)
+    peak_full_idx = len(closes) - len(window) + peak_local_idx
+    pre_start = max(0, peak_full_idx - n)
+    pre_window = closes[pre_start:peak_full_idx + 1]
+    trough = min(pre_window) if pre_window else None
+    runup = round((peak - trough) / trough * 100, 2) if trough and trough > 0 else None
+    return dd, runup
+
+
 def _get_spy_history() -> dict | None:
     """SPY daily history (3y) を 24h cache で fetch。
 
@@ -18165,6 +18195,10 @@ async def cron_rs_scan(
                 _pv50, _sl50 = _compute_pv50_sl50(t_closes)
                 result["pv50"] = _pv50
                 result["sl50"] = _sl50
+                # 過熱除外フィルタ B軸: dd60/runup60 を closes から追加算出 (SPEC 2026-07-02 B軸)。
+                _dd60, _runup60 = _compute_drawdown_runup(t_closes)
+                result["dd60"] = _dd60
+                result["runup60"] = _runup60
                 gc = _detect_gc_inline(t_closes, t_times)
                 return ticker, result, gc, None
 
@@ -18179,6 +18213,8 @@ async def cron_rs_scan(
                 "self_percentile": result.get("self_percentile"),
                 "pv50": result.get("pv50"),
                 "sl50": result.get("sl50"),
+                "dd60": result.get("dd60"),
+                "runup60": result.get("runup60"),
             })
             if gc:
                 raw_gc.append({"ticker": ticker, "cross_date": gc["cross_date"], "days_ago": gc["days_ago"]})
@@ -18201,12 +18237,18 @@ async def cron_rs_scan(
             _pv50, _sl50 = _compute_pv50_sl50(t_closes)
             result["pv50"] = _pv50
             result["sl50"] = _sl50
+            # 過熱除外フィルタ B軸: dd60/runup60 を closes から追加算出 (SPEC 2026-07-02 B軸)。
+            _dd60, _runup60 = _compute_drawdown_runup(t_closes)
+            result["dd60"] = _dd60
+            result["runup60"] = _runup60
             raw_rs.append({
                 "ticker": ticker,
                 "rs_vs_spy_pct": float(result["rs_vs_spy_pct"]),
                 "self_percentile": result.get("self_percentile"),
                 "pv50": result.get("pv50"),
                 "sl50": result.get("sl50"),
+                "dd60": result.get("dd60"),
+                "runup60": result.get("runup60"),
             })
             gc = _detect_gc_inline(t_closes, t_times)
             if gc:
@@ -18264,6 +18306,8 @@ async def cron_rs_scan(
                     "delta_1d_percentile": delta,  # v125 Sprint 2.5 新規 (migration 2026-05-28)
                     "pv50": r.get("pv50"),  # 上昇トレンドフィルタ A軸 (migration 2026-07-02)
                     "sl50": r.get("sl50"),
+                    "dd60": r.get("dd60"),  # 過熱除外フィルタ B軸 (migration 2026-07-02)
+                    "runup60": r.get("runup60"),
                     "period_months": 6,
                 })
             if rows:
@@ -18289,12 +18333,15 @@ async def cron_rs_scan(
                         "delta_1d_percentile" in err_msg
                         or "pv50" in err_msg
                         or "sl50" in err_msg
+                        or "dd60" in err_msg
+                        or "runup60" in err_msg
                         or "column" in err_msg
                     ):
-                        # migration 未適用の任意カラム (delta_1d=2026-05-28 / pv50,sl50=2026-07-02) を
-                        # drop して base schema のみで再 upsert。user が Supabase SQL Editor で apply するまでの bridge。
-                        print(f"[cron_rs_scan] optional column 不在、 fallback without delta/pv50/sl50: {inner_e}")
-                        _optional_cols = ("delta_1d_percentile", "pv50", "sl50")
+                        # migration 未適用の任意カラム (delta_1d=2026-05-28 / pv50,sl50=2026-07-02 A軸 /
+                        # dd60,runup60=2026-07-02 B軸) を drop して base schema のみで再 upsert。
+                        # user が Supabase SQL Editor で apply するまでの bridge。
+                        print(f"[cron_rs_scan] optional column 不在、 fallback without delta/pv50/sl50/dd60/runup60: {inner_e}")
+                        _optional_cols = ("delta_1d_percentile", "pv50", "sl50", "dd60", "runup60")
                         rows_no_delta = [
                             {k: v for k, v in r.items() if k not in _optional_cols}
                             for r in rows
@@ -21148,6 +21195,19 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
             if t and t in rs_map:
                 rs_map[t]["pv50"] = r.get("pv50")
                 rs_map[t]["sl50"] = r.get("sl50")
+    # 過熱除外フィルタ B軸 (dd60/runup60) — rs_ratings 由来 = rs/pv50 と同源 (SPEC 2026-07-02 B軸)。
+    #   ★ feedback_paged_select_missing_column_trap 回避: 共有 SELECT に混ぜず独立 fetch。
+    #     migration (2026-07-02_rs_ratings_dd60.sql) 未適用なら _fetch_all_rows_paged が例外を
+    #     握り空 list → dd60/runup60 のみ None (既存 rs/pv50 は無傷)。0 FMP call (Supabase read のみ)。
+    freshness["dd60"] = rs_cd
+    if rs_cd:
+        for r in _fetch_all_rows_paged(
+            sb, "rs_ratings", "ticker,dd60,runup60", eq={"calc_date": rs_cd},
+        ):
+            t = str(r.get("ticker") or "").upper()
+            if t and t in rs_map:
+                rs_map[t]["dd60"] = r.get("dd60")
+                rs_map[t]["runup60"] = r.get("runup60")
 
     # pattern_signals cup_handle (Premium) — 直近 7 日、 per-ticker 最新
     # buy-quality Sprint 2: #3 pivot_distance_pct 算出のため payload も SELECT 追加。
@@ -21255,6 +21315,10 @@ async def _build_universe_payload(sb, universe_size: int) -> dict:
             # 上昇トレンドフィルタ A軸 (free) — pv50=50日線乖離%, sl50=50日線傾き%(21営業日)。測定外=null(AND除外)。
             "pv50": _uni_round((rs or {}).get("pv50")),
             "sl50": _uni_round((rs or {}).get("sl50")),
+            # 過熱除外フィルタ B軸 (free) — dd60=直近60営業日高値からの下落率%, runup60=その高値までの
+            # 直近60営業日上昇率%。測定外=null(AND除外)。SPEC_2026-07-02_screener-overheat-exclusion-b-axis.md。
+            "dd60": _uni_round((rs or {}).get("dd60")),
+            "runup60": _uni_round((rs or {}).get("runup60")),
             # ファンダ 5 条件 pass (free) — tri-state: True/False/None(測定外)
             "funda_pass": funda_eval.get(tk),
             # CAN-SLIM 数値 (free) — sf 欠落=測定外 null (false と区別)
