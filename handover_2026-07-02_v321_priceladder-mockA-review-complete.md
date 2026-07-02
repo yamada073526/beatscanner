@@ -39,6 +39,13 @@
 - **design token のscope制約は grep だけでなく設計文書 (design_recipes.md) の記述も確認すること**。`--shadow-glow-cyan-reading` は`var(--shadow-`のwhitelist正規表現には合致するため機械的design-checkは通過するが、design_recipes.md §-1-Bで「`.bs-mode-reading` scope内限定」と明記されておりscope外使用は文書違反。今回ui-designerレビューで指摘され`--shadow-glow-cyan` (scope制限なし) に修正。
 - **就寝中オートパイロットでの「merge」判断は、実装済みタスクでも danger zone + 大規模UX再構成の組み合わせでは見送るのが安全**。今回は3体review・全検証greenでも、産まれたばかりの実装をunattendedで本番投入するリスクを避け、「ready状態で待機」に留めた。これはCLAUDE.mdの「デプロイ運用」原則と、autopilot skillの「リスクの高い判断は保留」原則の両方に整合する判断。
 
+## 🟡 v320 以前から未着手のまま繰り越し (急がない・別ワークストリーム)
+
+- **v5 vs v6/v7 デザイン方向性の矛盾 (§38懸念で v5 のグラデ rail 不採用)**: ✅ 本セッション冒頭で user に gate確認し **v6/v7継続で解決済み**。以降の作業 (PR#188/#189) はこの決定に基づく。
+- **PR #175 (偽URL問題)**: v318時点で確認済みの通り ✅ 解消 (git log で merge済み確認済み、再掲不要)。
+- **filed_at 欠落の修正** (バグ・前向き土台・急がない、v318で root cause 特定済み・未着手のまま): guidance_snapshots の nightly cron 経路 (`_fetch_sec_guidance_structured`, `backend/app/main.py:6018`) が `_filing_date` を埋めないため、最新期の `guidance_verdict` が常に available:false。修正案A (恒久): nightly cron側でfiling日を埋める。修正案B (既存修復): backfill再実行。詳細は `git show <v318のcommit>:handover_2026-07-02_v318_sprint4c-s1-close.md` 参照。
+- **Sprint 4c S2-S4**: 意図的DEFER継続中 (データ蓄積が始まる次決算以降まで)。
+
 ## 📁 branch / PR 一覧
 
 - **作業 branch**: `claude/price-ladder-design-gate-s41yra` (本 handover もこの branch に push)
