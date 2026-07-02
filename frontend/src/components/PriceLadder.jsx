@@ -468,10 +468,11 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
               <span className="pl-lv-tick" aria-hidden="true" />
               <span className="pl-lv-val">
                 {lk ? (
-                  // G2 ロック表示: 値は • • • + 🔒 Premium (値を出さない)。
+                  // G2 ロック表示: 値は • • • + 🔒 (値を出さない)。mockup 準拠: pivot 行のみ "Premium" 文言併記
+                  // (最初のロック行で何がロックされているか明示、support 行以降は繰り返さず簡潔に)。
                   <>
                     <span className="pl-lv-dots">• • •</span>
-                    <span className="pl-lv-lock"><span aria-hidden="true">🔒 </span>Premium</span>
+                    <span className="pl-lv-lock"><span aria-hidden="true">🔒</span>{l.key === 'pivot' ? ' Premium' : ''}</span>
                   </>
                 ) : (
                   <>
@@ -573,14 +574,14 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
             )}
             {zWatchShow && (
               <>
-                <span className="pl-zwatch" aria-hidden="true" style={{ top: zWatchTop, height: zWatchH }} />
+                <span className="pl-zwatch" aria-hidden="true" data-testid="price-ladder-zone-watch" style={{ top: zWatchTop, height: zWatchH }} />
                 <span className="pl-zlab" aria-hidden="true" style={{ top: zWatchTop + Math.max(0, zWatchH / 2 - 12) }}>
                   監視<span className="s">ベース形成中</span>
                 </span>
               </>
             )}
             {zWarnShow && (
-              <span className="pl-zlab is-warn" aria-hidden="true" style={{ top: zWarnTop }}>
+              <span className="pl-zlab is-warn" aria-hidden="true" data-testid="price-ladder-zone-warn" style={{ top: zWarnTop }}>
                 警戒<span className="s">50日線割れ以下</span>
               </span>
             )}
@@ -688,7 +689,8 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
         fontStyle: 'italic',
         lineHeight: 1.5,
       }}>
-        ※ 各価格は目安。テクニカル分析は将来の値動きを保証するものではありません。
+        ※ 各水準はテクニカル上の目安で、将来の値動きや売買タイミングを保証・推奨するものではありません。
+        損切り基準（買値 −8%）はブレイク後にエントリーした後の規律であり、ブレイク前の現在値から逆算する水準ではありません。
       </p>
     </div>
   );

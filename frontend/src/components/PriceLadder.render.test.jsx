@@ -54,6 +54,10 @@ describe('PriceLadder (render smoke test)', () => {
     // ブレイク未確認ゾーンブラケット (Pivot 〜 +5%・pivot の「上」) が pivot 行検出時に描画されること
     // (2026-07-02 drift 修正: pivot 下ではなく上に表示。jsdom の getBoundingClientRect は 0 だが zoneBox は truthy)。
     expect(await screen.findByTestId('price-ladder-zone-bracket')).toBeTruthy();
+    // 監視ゾーン (pivot 下〜現在価格) も同時に描画される (mockup .zwatch 準拠、案A 忠実化で追加)。
+    expect(await screen.findByTestId('price-ladder-zone-watch')).toBeTruthy();
+    // 警戒ゾーン (50日線割れ以下) も row index から算出され描画される。
+    expect(await screen.findByTestId('price-ladder-zone-warn')).toBeTruthy();
   });
 
   it('pivot 未検出 (cup_handle なし) でも render エラーを投げない', async () => {
