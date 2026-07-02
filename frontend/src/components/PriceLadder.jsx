@@ -149,11 +149,6 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
   const containerRef = useRef(null);
   const [hoverKey, setHoverKey] = useState(null);
   const [rangeBox, setRangeBox] = useState(null);
-  // v7 リッチ化 (2026-07-02 user gate): ブレイク確認ゾーン (pivot 行 〜 現在価格行) の静的ブラケット。
-  // rangeBox (hover レンジ) と同じ DOM 計測パターンを流用 — 座標のハードコード無し、価格差からの逆算もしない
-  // (pivot は Premium ロックのままなので新規の漏洩経路にはならない: 既存レイアウトの縦間隔で暗に示される
-  // 相対距離を可視化するだけ)。
-  const [zoneBox, setZoneBox] = useState(null);
   // round8 #1: hover 中の level に対応するチャート線を強調 (data-pl-hl 属性、 CSS 駆動)。
   // round9: あわせて hover 価格を CustomEvent で通知 → チャートが点線ガイドを表示 (52週/損切り等、
   // 固有の線が無い level も全行反応)。
@@ -195,22 +190,6 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
     const uMid = uc.top + uc.height / 2 - cr.top;
     setRangeBox({ top: Math.min(hMid, uMid), height: Math.max(2, Math.abs(uMid - hMid)) });
   }, [hoverKey]);
-  // v7 リッチ化: ブレイク未確認 (現在値 < pivot) のときのみ、pivot 行の上端 〜 現在価格行の下端を
-  // ブラケット表示。ブレイク確認後・pivot 未検出時は zoneBox=null で非表示 (§38: 常時表示にしない)。
-  useLayoutEffect(() => {
-    const c = containerRef.current;
-    if (!c || !Number.isFinite(pivot) || !Number.isFinite(current) || current >= pivot) {
-      setZoneBox(null);
-      return;
-    }
-    const pivotEl = c.querySelector('[data-testid="price-ladder-row-pivot"]');
-    const curEl = c.querySelector('[data-testid="price-ladder-row-current"]');
-    if (!pivotEl || !curEl) { setZoneBox(null); return; }
-    const cr = c.getBoundingClientRect();
-    const pr = pivotEl.getBoundingClientRect();
-    const ur = curEl.getBoundingClientRect();
-    setZoneBox({ top: pr.top - cr.top, height: Math.max(2, (ur.top + ur.height) - pr.top) });
-  }, [pivot, current, levels]);
   // round11 B (逆連動): チャートの pl-chartline-* hover → ladder 行を強調 (CustomEvent 受信)。
   const [chartHoverKey, setChartHoverKey] = useState(null);
   useEffect(() => {
@@ -637,24 +616,6 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
             {rangeBox && (
               <span className="pl-spine-range" aria-hidden="true" style={{ top: rangeBox.top, height: rangeBox.height }} />
             )}
-            {/* v7 リッチ化: ブレイク確認ゾーン (pivot 行 〜 現在価格行) の破線ブラケット。中立色のみ (§38)。 */}
-            {zoneBox && (
-              <>
-                <span
-                  className="pl-zone-bracket"
-                  aria-hidden="true"
-                  data-testid="price-ladder-zone-bracket"
-                  style={{ top: zoneBox.top, height: zoneBox.height }}
-                />
-                <span
-                  className="pl-zone-label"
-                  aria-hidden="true"
-                  style={{ top: zoneBox.top + zoneBox.height / 2 - 14, lineHeight: 1.25 }}
-                >
-                  ブレイク確認<br />ゾーン
-                </span>
-              </>
-            )}
             {/* round11 A → Phase2 task3: 縮尺固定 (toggle 撤去・Q3 user 判断)。 冠/ゾーン・前回比行も撤去し
                 空間そのものに語らせる (本物の数直線)。 行間 = 価格差の sqrt に比例 + 上限 cap (近接水準が
                 下限 4px に張り付く「スカスカ」 回避: 遠距離を sqrt 圧縮、 合計を SCALE_PX へ正規化、 1 区間の
@@ -742,15 +703,29 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
             data-testid="price-ladder-volgauge"
             style={{ marginTop: 'var(--space-4, 16px)', paddingTop: 'var(--space-3, 12px)', borderTop: '1px solid var(--border)' }}
           >
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 18 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 22 }}>
               ブレイク確認の出来高（+40% 基準）
             </div>
-            <div className="pl-vgauge-track">
-              <div className={`pl-vgauge-fill${achieved ? ' achieved' : ''}`} style={{ width: `${fillPct}%` }} />
-              <div className="pl-vgauge-needle" style={{ left: `${fillPct}%` }} />
-              <span className="pl-vgauge-nlab" style={{ left: `${fillPct}%` }}>×{volRatio.toFixed(2)}</span>
-              <div className="pl-vgauge-thr" style={{ left: `${thrPct}%` }} />
-              <span className="pl-vgauge-thrlab" style={{ left: `${thrPct}%` }}>+40% 基準</span>
+            <div style={{ position: 'relative', height: 16, borderRadius: 8, background: 'var(--bg-muted)', border: '1px solid var(--border)' }}>
+              <div style={{
+                position: 'absolute', left: 0, top: 0, bottom: 0, width: `${fillPct}%`, borderRadius: '8px 0 0 8px',
+                background: achieved
+                  ? 'color-mix(in srgb, var(--color-gain) 55%, transparent)'
+                  : 'color-mix(in srgb, var(--text-muted) 70%, transparent)',
+              }} />
+              <div style={{ position: 'absolute', top: -4, bottom: -4, left: `${fillPct}%`, width: 2, background: 'var(--text-primary)', borderRadius: 2 }} />
+              <span style={{
+                position: 'absolute', top: -23, left: `${fillPct}%`, transform: 'translateX(-50%)',
+                fontSize: 10, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums',
+                background: 'var(--bg-muted)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 6px',
+              }}>×{volRatio.toFixed(2)}</span>
+              <div style={{ position: 'absolute', top: -3, bottom: -3, left: `${thrPct}%`, width: 2, background: 'var(--color-gain)', borderRadius: 2 }} />
+              <span style={{
+                position: 'absolute', top: -23, left: `${thrPct}%`, transform: 'translateX(-50%)',
+                fontSize: 9, color: 'var(--color-gain)', whiteSpace: 'nowrap',
+                background: 'color-mix(in srgb, var(--color-gain) 10%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--color-gain) 35%, transparent)', borderRadius: 4, padding: '1px 6px',
+              }}>+40% 基準</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: 'var(--text-muted)', marginTop: 6 }}>
               <span>×0</span><span>×0.5</span><span>×1.0</span><span>×1.6</span>
