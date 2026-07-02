@@ -182,9 +182,42 @@ export const UPTREND_FACET = {
   grades: { loose: -8, standard: -3, strict: 0, severe: 0 },
   annotMap: { loose: '50線−8%内', standard: '50線−3%内', strict: '50線上・傾横', severe: '50線上・傾↑' },
 };
+// ─── 過熱除外フィルタ (B軸) facet (SPEC_2026-07-02 screener-overheat-exclusion-b-axis) ──
+// quiet_quality/market_leading に混入する「過熱後の急反落」銘柄 (MU/WDC/STX/STRL 等) を除外する
+// opt-in override。A軸 (uptrend) の姉妹 facet — 同じ落ちるナイフ問題だが、A軸の pv50/sl50 は
+// 「現時点のスナップショット」のため既に高値から-18〜42%崩れた銘柄を捕捉できず (B cohort は現時点で
+// pv50/sl50 が共にプラスに回復済み・実測済)、履歴を持つ新 signal dd60/runup60 が必要と判定 (SPEC §9 論点1)。
+// signal: dd60 (直近60営業日高値からの下落率%) + runup60 (その高値までの直近60営業日上昇率%)。
+//   compound: 「大きく吹き上げてから大きく崩れた」パターンのみを dd60<X AND runup60>=Y の AND で捕捉。
+//   dd60 単独 (S-1) では健全な深い調整 (APA 等) と分離不可能なことを Sprint 1 実データ較正で確認済み。
+// ★ FUNDA_FACETS には入れない (uptrend と同型)。★ PRESET_PREDICATES の grades にも入れない = default OFF
+//   (cold-start 安全・ゼロ回帰)。renderCrow guard で quiet_quality / market_leading の 2 preset のみ描画。
+// grades = dd60 上限% (主軸)。runup60 側の閾値は OVERHEAT_RUNUP_THR (段毎)。annotMap で両軸を honest 表示。
+// Sprint 1 実データ較正 (2026-07-02, 本番 quiet_quality/market_leading[標準] 118銘柄) で確定:
+//   known B-cohort (MU/WDC/STX/STRL) dd60=-14.9〜-21.9% / runup60=+160〜+277% を厳段で全捕捉。
+// §38: dd60/runup60 は「高値からの下落率」「高値までの上昇率」の観測事実。断定・最上級表現なし。
+// null (nightly scan 前/履歴不足) = AND 除外 (honest、A軸と同じ規約)。
+export const OVERHEAT_EXCL_FACET = {
+  key: 'overheat_excl',
+  field: 'dd60',
+  label: '過熱後の反落 除外',
+  labelShort: '反落除外',
+  tooltip: '急騰後に高値から大きく反落した銘柄を除外します（高値までの上昇率と、そこからの下落率を組み合わせて判定）。段階を上げるほど、より軽い反落も除外の対象になります。',
+  unit: '%', tier: 'free', category: 'timing', delta: false,
+  grades: { loose: -20, standard: -16, strict: -14, severe: -12 },
+  annotMap: {
+    loose: '急騰+140%↑で-20%割れ除外',
+    standard: '急騰+140%↑で-16%割れ除外',
+    strict: '急騰+140%↑で-14%割れ除外',
+    severe: '急騰+80%↑で-12%割れ除外',
+  },
+};
+// runup60 側の閾値 (段毎)。dd60 (facet.grades) と AND で「除外」を判定する第2軸 (compound signal)。
+export const OVERHEAT_RUNUP_THR = { loose: 140, standard: 140, strict: 140, severe: 80 };
 export const FACET_MAP = Object.fromEntries(
   [...FUNDA_FACETS, NEW_HIGH_SIGNAL_FACET, BUY_ZONE_G_FACET,
-   VS_SPY_FACET, RS_MID_BAND_FACET, ROE_LENIENT_FACET, EPS_YOY_MID_FACET, UPTREND_FACET].map((f) => [f.key, f])
+   VS_SPY_FACET, RS_MID_BAND_FACET, ROE_LENIENT_FACET, EPS_YOY_MID_FACET, UPTREND_FACET,
+   OVERHEAT_EXCL_FACET].map((f) => [f.key, f])
 );
 // preset の CORE 4 metric。volume/inst_holders は preset off、override で追加 (Pass 3c)。
 export const PRESET_CORE_KEYS = ['eps_yoy_pct', 'eps_cagr_3y', 'roe', 'rs_percentile'];
@@ -433,6 +466,22 @@ export const PRESET_CONDS = [
     if (lvl === 'severe') return item.sl50 != null && item.sl50 >= 1;    // 50日線上 かつ 傾き上向き
     return true;                                                         // 緩/標 は pv50 のみ
   } },
+  // ── 過熱除外フィルタ (B軸) compound grade 条件 (SPEC_2026-07-02 screener-overheat-exclusion-b-axis) ──
+  //   除外条件: dd60 < grades[lvl] (段毎の下落率上限) AND runup60 >= OVERHEAT_RUNUP_THR[lvl]。
+  //   両方を満たす (大きく吹き上げてから大きく崩れた) 場合のみ除外 (pass=false)。null (dd60/runup60 測定外
+  //   = nightly scan 前/履歴不足) = 除外 (honest、A軸 uptrend と同じ規約)。
+  //   quiet_quality/market_leading の opt-in override (default OFF・PRESET_PREDICATES 非登録) のため
+  //   cold-start でも既存挙動に無影響。Sprint 1 実データ較正 (SPEC §12) で確定した4段階グリッド。
+  { key: 'overheat_excl',   kind: 'grade',  facet: FACET_MAP.overheat_excl, pass: (item, lvl) => {
+    const dd = item.dd60;
+    const ru = item.runup60;
+    if (dd == null || ru == null) return false;                          // 測定外 = AND 除外 (honest)
+    const ddThr = FACET_MAP.overheat_excl.grades[lvl];
+    const ruThr = OVERHEAT_RUNUP_THR[lvl];
+    if (ddThr == null || ruThr == null) return true;                     // 未定義段は no-op (clamp 済)
+    if (dd < ddThr && ru >= ruThr) return false;                         // 急騰後の急反落パターン = 除外
+    return true;
+  } },
 ];
 export const COND_MAP = Object.fromEntries(PRESET_CONDS.map((c) => [c.key, c]));
 // binary/flag 条件のみ (extra フラグ経由で AND・itemPasses が走査)。grade は activeGrades 経由で別ループ。
@@ -509,7 +558,9 @@ export const CROW_LAYOUT = [
   // rs_mid_band (範囲帯・custom 描画) / vs_spy (≥) は market_leading 専用 (renderCrow guard で他 preset 非露出)。
   // uptrend (上昇トレンドフィルタ A軸) も quiet_quality 専用 (renderCrow guard で他 preset 非露出)。RS の直後に置き
   //   RS床→上昇トレンド→出来高静か の順で「強いのに落ちてない静かな株」の意味流れを作る (SPEC_2026-07-02)。
-  { group: 'タイミング', sub: '値動き・勢い',         keys: ['new_high_signal', 'buy_zone_g', 'buy_zone', 'new_high_52w', 'cup', 'rs_percentile', 'uptrend', 'rs_mid_band', 'vs_spy', 'sector_leader', 'volume_surge_pct', 'volume_quiet'] },
+  // overheat_excl (過熱除外フィルタ B軸) も quiet_quality/market_leading 専用 (renderCrow guard で他 preset
+  //   非露出)。uptrend の直後に置き「下降除外 (A軸) → 過熱除外 (B軸)」の意味流れを作る (SPEC_2026-07-02 B軸)。
+  { group: 'タイミング', sub: '値動き・勢い',         keys: ['new_high_signal', 'buy_zone_g', 'buy_zone', 'new_high_52w', 'cup', 'rs_percentile', 'uptrend', 'overheat_excl', 'rs_mid_band', 'vs_spy', 'sector_leader', 'volume_surge_pct', 'volume_quiet'] },
   // inst_qoq_calm (機関 殺到なし ≤) も quiet_quality 専用 (renderCrow guard 同上)。≥型 inst_holders_qoq_pct と非並置。
   { group: '需給',       sub: '機関の動き',           keys: ['ad_volume', 'inst_holders_qoq_pct', 'inst_qoq_calm'] },
 ];
@@ -558,12 +609,14 @@ export const PRESET_DISPLAY_CONDS = {
   //   追加済 = RENDERABLE (renderCrow が quiet_quality 限定で描画)。
   //   uptrend (上昇トレンドフィルタ A軸・SPEC_2026-07-02): opt-in override (default OFF・PRESET_PREDICATES 非登録)
   //     のため applied ⊆ display invariant を壊さない (display に載せるが未適用時は AND に不参加)。RS 床の直後に配置。
-  quiet_quality:  ['rs_percentile', 'uptrend', 'volume_quiet', 'inst_qoq_calm', 'ocf_margin_pct', 'roe'],
+  //   overheat_excl (過熱除外フィルタ B軸・2026-07-02): 同じく opt-in override (default OFF)。uptrend の直後に配置。
+  quiet_quality:  ['rs_percentile', 'uptrend', 'overheat_excl', 'volume_quiet', 'inst_qoq_calm', 'ocf_margin_pct', 'roe'],
   // 市場をリードし始めた銘柄 (SPEC_2026-06-28 market_leading): 述語適用6条件と 1:1 (隠れフィルタなし invariant)。
   //   rs_mid_band(範囲 gate 相当・必須) + vs_spy + ocf_margin_pct + roe_lenient + eps_yoy_mid (grades) + latest_beat (beatOnly gate)。
   //   uptrend (上昇トレンドフィルタ A軸・2026-07-02 追記): quiet_quality と同じ opt-in override を再利用
   //     (rs_mid_band/vs_spy がトレーリング指標のため落ちるナイフを見落とす同型リスク・user 指摘)。
-  market_leading: ['rs_mid_band', 'vs_spy', 'ocf_margin_pct', 'roe_lenient', 'eps_yoy_mid', 'latest_beat', 'uptrend'],
+  //   overheat_excl (過熱除外フィルタ B軸・2026-07-02 追記): 同じく quiet_quality と同じ opt-in override を再利用。
+  market_leading: ['rs_mid_band', 'vs_spy', 'ocf_margin_pct', 'roe_lenient', 'eps_yoy_mid', 'latest_beat', 'uptrend', 'overheat_excl'],
 };
 
 // ─── D-8 sort (SPEC_2026-06-25): 結果リストのユーザー制御 sort ──────────────────────

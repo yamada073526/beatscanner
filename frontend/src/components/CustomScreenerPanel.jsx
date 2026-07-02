@@ -699,6 +699,11 @@ const CustomScreenerPanel = forwardRef(function CustomScreenerPanel({
     if (cond.key === 'uptrend') {
       if (activePreset !== 'quiet_quality' && activePreset !== 'market_leading') return null;
     }
+    // ── 過熱除外フィルタ (B軸) facet ガード (SPEC_2026-07-02 screener-overheat-exclusion-b-axis) ──
+    //   uptrend と同じ 2 preset 限定 (他 preset 非露出)。
+    if (cond.key === 'overheat_excl') {
+      if (activePreset !== 'quiet_quality' && activePreset !== 'market_leading') return null;
+    }
     // ── 「市場をリードし始めた銘柄」専用 facet ガード (SPEC_2026-06-28 market_leading) ──
     //   vs_spy / rs_mid_band / roe_lenient / eps_yoy_mid は CROW_LAYOUT 登録済 (RENDERABLE 要件) だが、
     //   market_leading 以外 (custom mode = activePreset null 含む) では描かない (他 preset 誤露出防止・Trust Cliff)。
