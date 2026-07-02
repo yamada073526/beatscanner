@@ -1,0 +1,48 @@
+name: TEMP RS scan now (使い捨て・A軸/B軸 backfill テスト用・実行後削除)
+
+# 一時的な検証用ワークフロー。A軸 (pv50/sl50) + B軸 (dd60/runup60) の本番 backfill を
+# nightly (23:07 UTC) を待たずに今すぐ確認するため、rs-scan だけを単発実行する
+# (cup-scan/canslim-scan/earnings-annual は含まない・rs-scan は cross-ticker percentile の
+# ため単発維持・chunk化不要・所要 ~1-2分)。schedule なし・workflow_dispatch のみ。
+# 確認完了後にこのファイルごと削除する。
+#
+# nightly_scan.yml の "RS scan" step (main.py cron_rs_scan) と同一の呼び出し。
+
+on:
+  workflow_dispatch:
+
+jobs:
+  rs-scan-now:
+    name: RS scan (single-shot, no cup/canslim/earnings-annual)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BASE: https://beatscanner-production.up.railway.app
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      BODY: '{"universe_source":"russell3000","universe_size":3000,"worker_count":5,"concurrency":12}'
+    steps:
+      - name: Setup tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq jq curl
+
+      - name: Guard — CRON_SECRET present
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET secret 未設定。"
+            exit 1
+          fi
+
+      - name: RS scan
+        run: |
+          echo "=== rs-scan (A軸 pv50/sl50 + B軸 dd60/runup60 backfill) ==="
+          resp=$(curl -s --max-time 1200 -w '\nHTTP:%{http_code}' -X POST \
+            -H "X-Cron-Secret: $CRON_SECRET" -H 'Content-Type: application/json' \
+            -d "$BODY" "$BASE/api/cron/rs-scan")
+          http=$(echo "$resp" | tail -1 | sed 's/.*HTTP://')
+          body=$(echo "$resp" | sed '$d')
+          echo "HTTP=$http"
+          echo "$body" | jq '{calc_date,scored_count,upserted_count,failed_count,gc_upserted_count}' 2>/dev/null || echo "$body"
+          if [ "$http" != "200" ]; then
+            echo "::warning::rs-scan が HTTP $http (gateway timeout の可能性。Supabase 側で backfill 状況を直接確認する)。"
+          fi
