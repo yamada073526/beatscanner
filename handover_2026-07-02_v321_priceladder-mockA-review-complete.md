@@ -41,8 +41,8 @@
 
 ## 🟡 v320 以前から未着手のまま繰り越し (急がない・別ワークストリーム)
 
-- **v5 vs v6/v7 デザイン方向性の矛盾 (§38懸念で v5 のグラデ rail 不採用)**: ✅ 本セッション冒頭で user に gate確認し **v6/v7継続で解決済み**。以降の作業 (PR#188/#189) はこの決定に基づく。
-- **PR #175 (偽URL問題)**: v318時点で確認済みの通り ✅ 解消 (git log で merge済み確認済み、再掲不要)。
+- **v5 と v6/v7 は互いに矛盾するデザイン** (v5 のグラデ rail は **§38（断定示唆）で不採用** の過去の正式決定): 前版が指示した通り **次セッション冒頭で必ず** user に gate確認し、✅ **v6/v7継続で解決済み**。以降の作業 (PR#188/#189) はこの決定に基づく。
+- **偽 URL (#175) を返したが実際は未作成** の件: v318時点で確認済みの通り ✅ 解消 (git log で merge済み確認済み、再掲不要)。
 - **filed_at 欠落の修正** (バグ・前向き土台・急がない、v318で root cause 特定済み・未着手のまま): guidance_snapshots の nightly cron 経路 (`_fetch_sec_guidance_structured`, `backend/app/main.py:6018`) が `_filing_date` を埋めないため、最新期の `guidance_verdict` が常に available:false。修正案A (恒久): nightly cron側でfiling日を埋める。修正案B (既存修復): backfill再実行。詳細は `git show <v318のcommit>:handover_2026-07-02_v318_sprint4c-s1-close.md` 参照。
 - **Sprint 4c S2-S4**: 意図的DEFER継続中 (データ蓄積が始まる次決算以降まで)。
 
