@@ -1,0 +1,142 @@
+name: TEMP B-axis calibration (使い捨て・較正完了後に削除)
+
+# 一時的な検証用ワークフロー。B軸(過熱除外)SPEC の Sprint 1 実データ較正のために
+# quiet_quality/market_leading[標準] 通過銘柄の dd60(高値からの下落率)/runup(直近急騰率)
+# を実測する。schedule なし・workflow_dispatch のみ。較正完了後にこのファイルごと削除する。
+#
+# SPEC: docs/specs/SPEC_2026-07-02_screener-overheat-exclusion-b-axis.md Sprint 1
+# 認証: 不要 (scanner/universe・price-history は public endpoint、CRON_SECRET 不使用)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  calibrate:
+    name: B-axis dd60/runup calibration
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Fetch universe + compute dd60/runup
+        run: |
+          python3 - <<'PYEOF'
+          import json, urllib.request, time, statistics
+
+          BASE = "https://beatscanner-production.up.railway.app"
+          MAX_FETCH = 200  # 暴走防止の安全キャップ
+
+          def get_json(url, timeout=60):
+              req = urllib.request.Request(url, headers={"User-Agent": "b-axis-calibration/1.0"})
+              with urllib.request.urlopen(req, timeout=timeout) as r:
+                  return json.loads(r.read().decode())
+
+          print("=== fetching universe ===", flush=True)
+          uni = get_json(f"{BASE}/api/scanner/universe?universe_size=3000", timeout=120)
+          items = uni.get("items", [])
+          print(f"universe items: {len(items)} as_of={uni.get('as_of')}", flush=True)
+
+          def passes_quiet_quality(it):
+              rs, vol, inst, ocf, roe = (it.get("rs_percentile"), it.get("volume_surge_pct"),
+                                          it.get("inst_holders_qoq_pct"), it.get("ocf_margin_pct"), it.get("roe"))
+              if rs is None or rs < 70: return False
+              if vol is None or vol > 20: return False
+              if inst is None or inst > 20: return False
+              if ocf is None or ocf < 15: return False
+              if roe is None or roe < 17: return False
+              return True
+
+          def passes_market_leading(it):
+              rs, vs, ocf, roe, eps, beat = (it.get("rs_percentile"), it.get("rs_vs_spy_pct"),
+                                              it.get("ocf_margin_pct"), it.get("roe"),
+                                              it.get("eps_yoy_pct"), it.get("latest_beat"))
+              if rs is None or not (55 <= rs <= 75): return False
+              if vs is None or vs < 8: return False
+              if ocf is None or ocf < 10: return False
+              if roe is not None and roe < 10: return False
+              if eps is None or eps < 10: return False
+              if beat is not True: return False
+              return True
+
+          qq = [it for it in items if passes_quiet_quality(it)]
+          ml = [it for it in items if passes_market_leading(it)]
+          print(f"quiet_quality[standard] pass: {len(qq)}", flush=True)
+          print(f"market_leading[standard] pass: {len(ml)}", flush=True)
+
+          KNOWN_B_COHORT = {"MU", "WDC", "STX", "STRL"}
+          qq_tickers = {it["ticker"] for it in qq}
+          ml_tickers = {it["ticker"] for it in ml}
+          print(f"known B-cohort in quiet_quality: {sorted(KNOWN_B_COHORT & qq_tickers)}", flush=True)
+          print(f"known B-cohort in market_leading: {sorted(KNOWN_B_COHORT & ml_tickers)}", flush=True)
+
+          target_tickers = sorted(qq_tickers | ml_tickers | KNOWN_B_COHORT)
+          if len(target_tickers) > MAX_FETCH:
+              print(f"::warning::target {len(target_tickers)} 件が MAX_FETCH={MAX_FETCH} を超過、先頭 {MAX_FETCH} 件のみ取得 (安全キャップ)", flush=True)
+              target_tickers = target_tickers[:MAX_FETCH]
+          print(f"total tickers to fetch price-history: {len(target_tickers)}", flush=True)
+
+          def dd_and_runup(closes, N):
+              if len(closes) < 5:
+                  return None, None
+              window = closes[-N:] if len(closes) >= N else closes[:]
+              peak = max(window)
+              last = closes[-1]
+              if peak <= 0:
+                  return None, None
+              dd = round((last - peak) / peak * 100, 2)
+              peak_local_idx = window.index(peak)
+              peak_full_idx = len(closes) - len(window) + peak_local_idx
+              pre_start = max(0, peak_full_idx - N)
+              pre_window = closes[pre_start:peak_full_idx + 1]
+              trough = min(pre_window) if pre_window else None
+              runup = round((peak - trough) / trough * 100, 2) if trough and trough > 0 else None
+              return dd, runup
+
+          results = []
+          item_by_ticker = {it["ticker"]: it for it in items}
+          for i, tk in enumerate(target_tickers):
+              closes = []
+              try:
+                  ph = get_json(f"{BASE}/api/price-history/{tk}?period=1y", timeout=30)
+                  prices = ph.get("prices", [])
+                  closes = [p["close"] for p in prices if p.get("close") is not None]
+              except Exception as e:
+                  print(f"  [{tk}] fetch failed: {e}", flush=True)
+              dd40, _ = dd_and_runup(closes, 40)
+              dd60, runup60 = dd_and_runup(closes, 60)
+              dd120, _ = dd_and_runup(closes, 120)
+              it = item_by_ticker.get(tk, {})
+              row = {
+                  "ticker": tk, "in_qq": tk in qq_tickers, "in_ml": tk in ml_tickers,
+                  "is_cohort": tk in KNOWN_B_COHORT, "rs": it.get("rs_percentile"),
+                  "n_closes": len(closes), "dd40": dd40, "dd60": dd60, "dd120": dd120, "runup60": runup60,
+              }
+              results.append(row)
+              print(f"  [{i+1}/{len(target_tickers)}] {tk}: n={len(closes)} dd40={dd40} dd60={dd60} dd120={dd120} "
+                    f"runup60={runup60} qq={row['in_qq']} ml={row['in_ml']} cohort={row['is_cohort']}", flush=True)
+              time.sleep(0.4)
+
+          print("\n=== SUMMARY ===", flush=True)
+          def stats(vals):
+              vals = [v for v in vals if v is not None]
+              if not vals: return "n=0"
+              q = statistics.quantiles(vals, n=4) if len(vals) >= 4 else [min(vals), statistics.median(vals), max(vals)]
+              return f"n={len(vals)} min={min(vals):.1f} p25={q[0]:.1f} median={statistics.median(vals):.1f} p75={q[-1]:.1f} max={max(vals):.1f}"
+
+          cohort_r = [r for r in results if r["is_cohort"]]
+          qq_healthy = [r for r in results if r["in_qq"] and not r["is_cohort"]]
+          ml_healthy = [r for r in results if r["in_ml"] and not r["is_cohort"]]
+
+          print(f"known B-cohort dd60:               {stats([r['dd60'] for r in cohort_r])}", flush=True)
+          print(f"known B-cohort runup60:             {stats([r['runup60'] for r in cohort_r])}", flush=True)
+          print(f"quiet_quality healthy(非cohort)dd60: {stats([r['dd60'] for r in qq_healthy])}", flush=True)
+          print(f"quiet_quality healthy runup60:       {stats([r['runup60'] for r in qq_healthy])}", flush=True)
+          print(f"market_leading healthy(非cohort)dd60:{stats([r['dd60'] for r in ml_healthy])}", flush=True)
+          print(f"market_leading healthy runup60:      {stats([r['runup60'] for r in ml_healthy])}", flush=True)
+
+          print("\n=== cohort detail ===", flush=True)
+          for r in cohort_r:
+              print(json.dumps(r), flush=True)
+
+          print("\n=== FULL_RESULT_JSON_START ===", flush=True)
+          print(json.dumps(results), flush=True)
+          print("=== FULL_RESULT_JSON_END ===", flush=True)
+          PYEOF
