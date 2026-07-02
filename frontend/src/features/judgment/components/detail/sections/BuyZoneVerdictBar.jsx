@@ -9,7 +9,10 @@ import {
  * BuyZoneVerdictBar — §③「テクニカル・買い場」章 最上部の薄い verdict bar (2 秒 anchor)。
  *
  * 設計 SSOT: ../../../constants/buyZoneVerdict.js (3 体合議 + user gate 2026-06-30)。
- * 正本 mockup: docs/specs/mockups/pane3-technical-buyzone-v6.html の .vbar。
+ * 正本 mockup: docs/specs/mockups/pane3-full-v7.html (旧 pane3-technical-buyzone-v6.html) の .vbar。
+ * 2026-07-02 user gate: 価格の font-size/weight を mockup 準拠 (18px/700) に強調。ただし mockup の
+ *   ⏳ アイコン (watch) と confirm 状態の cyan グラデーションは 2026-06-30 決定により意図的に非採用のまま
+ *   (§38「ブランドが推している＝買い」の暗黙断定回避)。詳細は下記コメント + buyZoneVerdict.js 参照。
  *
  * データは zero-fetch (props で受領):
  *   - state: cup_handle.state (親 JudgmentDetail の fetchTechnical から、追加 fetch なし)
@@ -84,7 +87,8 @@ export default function BuyZoneVerdictBar({ state, price, changePct }) {
           </span>
         )}
         {hasPrice && (
-          <span style={{ fontSize: 14, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>
+          // v7 リッチ化 (2026-07-02 user gate): mockup .vbar .px (18px/700) に合わせ強調。
+          <span style={{ fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>
             ${priceNum.toFixed(2)}
           </span>
         )}
