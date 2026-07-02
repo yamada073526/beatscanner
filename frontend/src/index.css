@@ -13301,6 +13301,99 @@ body.is-digest-resizing {
   color: var(--text-muted);
 }
 
+/* ── 価格ラダー 案A: mockup pane3-full-v7 .axis 準拠の rail中央レイアウト (user gate 2026-07-02、承認 target
+   docs/specs/mockups/pane3-priceladder-target-A.html)。旧 spine左 number-line を置換。
+   §38: dist% は中立色 (緑赤にしない)・現在価格 room は Premium 逆算% を漏らさない・損切り(リスク確認ライン)行は
+   累進開示 (ブレイク未確認時は非表示)。glow は token 経由 (--shadow-glow-cyan-reading) で design-check セーフ。 */
+.pl-axis { position: relative; }
+.pl-rail {
+  position: absolute;
+  left: 196px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: var(--border);
+  border-radius: 2px;
+}
+.pl-lv { position: absolute; left: 0; right: 0; height: 0; }
+.pl-lv-lab {
+  position: absolute;
+  right: calc(100% - 184px);
+  width: 184px;
+  text-align: right;
+  padding-right: 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.25;
+}
+.pl-lv-lab .sub { display: block; font-size: 9px; color: var(--text-muted); margin-top: 1px; }
+.pl-lv-tick {
+  position: absolute;
+  left: 186px;
+  width: 18px;
+  height: 1px;
+  background: var(--border-strong);
+  top: 0;
+}
+.pl-lv-val {
+  position: absolute;
+  left: 214px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.pl-lv-dist { margin-left: 8px; font-size: 10.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.pl-lv-ref {
+  margin-left: 8px;
+  font-size: 9px;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill, 999px);
+  padding: 1px 6px;
+}
+.pl-lv-lock { margin-left: 6px; font-size: 9px; font-weight: 700; color: var(--color-gold-dark); white-space: nowrap; }
+.pl-lv-dots { color: var(--text-muted); letter-spacing: 0.12em; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pl-lv.is-locked { opacity: 0.6; }
+.pl-lv.is-locked .pl-lv-tick { background: var(--border); }
+.pl-lv-dot {
+  position: absolute;
+  left: 190px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: var(--shadow-glow-cyan-reading);
+  transform: translateY(-7px);
+}
+.pl-lv.is-now .pl-lv-lab { font-size: 12.5px; color: var(--color-accent); font-weight: 700; }
+.pl-lv.is-now .pl-lv-val { font-size: 16px; font-weight: 700; color: var(--color-accent); }
+.pl-lv-room { display: block; margin-top: 5px; font-size: 10px; color: var(--text-secondary); }
+.pl-lv-room b { color: var(--text-primary); }
+.pl-lv-room .lk { color: var(--color-gold-dark); font-weight: 700; white-space: nowrap; }
+/* 3ゾーン: ブレイク確認 (.pl-zbrk = pivot 上の破線角丸) / 監視 (.pl-zwatch 薄帯) / 警戒 (.pl-zlab.is-warn ラベルのみ) */
+.pl-zbrk {
+  position: absolute;
+  left: 189px;
+  width: 16px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+}
+.pl-zwatch { position: absolute; left: 192px; width: 10px; border-radius: 6px; background: var(--text-muted); opacity: 0.08; }
+.pl-zlab {
+  position: absolute;
+  left: 214px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  line-height: 1.25;
+}
+.pl-zlab .s { display: block; font-weight: 400; font-size: 8.5px; }
+.pl-zlab.is-brk { color: var(--text-secondary); }
+.pl-zlab.is-warn { color: var(--color-warning); opacity: 0.9; }
+
 /* ── 出来高ゲージ (mockup .bo 準拠、inline style → CSS class 化)。判定ロジック (閾値/達成) は不変。 */
 .pl-vgauge-track {
   position: relative;

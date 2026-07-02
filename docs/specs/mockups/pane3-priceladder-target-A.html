@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<style>
+  :root{ --text-primary:#f1f5f9; --text-secondary:#cbd5e1; --text-muted:#94a3b8;
+    --border:#334155; --border-strong:rgba(255,255,255,0.14); --accent:#38bdf8;
+    --warning:#f59e0b; --gold:#d4af37; --gold-dark:#b8912e; --glow-cyan:0 0 13px rgba(56,189,248,0.55);
+    --bg-subtle:#1e2a3a; }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:#0b1220; font-family:-apple-system,'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif; color:var(--text-primary); }
+  .card{ max-width:680px; margin:26px auto; background:#0e1728; border:1px solid var(--border); border-radius:16px; padding:22px 26px; }
+
+  /* ヘッダ (mockup .pl-label / .pl-sub / .pl-status 準拠) */
+  .pl-label{ font-size:13px; font-weight:700; letter-spacing:.03em; color:var(--gold); text-transform:uppercase; }
+  .pl-label .en{ color:var(--text-muted); font-weight:500; letter-spacing:0; text-transform:none; font-size:11px; margin-left:6px; }
+  .pl-label .info{ color:var(--text-muted); font-weight:400; font-size:11px; margin-left:6px; }
+  .pl-sub{ font-size:11.5px; color:var(--text-secondary); margin-top:6px; }
+  .pl-status{ display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:10px; font-size:11.5px; color:var(--text-secondary); }
+  .pl-status .dot{ width:7px; height:7px; border-radius:50%; background:var(--accent); flex:0 0 auto; }
+  .pl-status .fact{ line-height:1.4; }
+  .pl-status .chip{ margin-left:auto; font-size:10.5px; color:var(--text-muted); border:1px solid var(--border); border-radius:999px; padding:3px 9px; white-space:nowrap; }
+  .pl-status .chip + .chip{ margin-left:0; }
+
+  /* rail 中央レイアウト (mockup .axis / .lv 準拠・案A) */
+  .axis{ position:relative; height:392px; margin:16px 0 4px; }
+  .rail{ position:absolute; left:196px; top:6px; bottom:6px; width:2px; background:var(--border); border-radius:2px; }
+  .lv{ position:absolute; left:0; right:0; height:0; }
+  .lv .tick{ position:absolute; left:186px; width:18px; height:1px; background:var(--border-strong); top:0; }
+  .lv .lab{ position:absolute; right:calc(100% - 184px); width:184px; text-align:right; padding-right:14px; font-size:12px; color:var(--text-secondary); line-height:1.25; }
+  .lv .lab .sub{ display:block; font-size:9px; color:var(--text-muted); margin-top:1px; }
+  .lv .val{ position:absolute; left:214px; font-size:13px; font-variant-numeric:tabular-nums; color:var(--text-primary); white-space:nowrap; }
+  .lv .dist{ margin-left:8px; font-size:10.5px; color:var(--text-muted); }  /* §38: 中立色 (緑赤にしない) */
+  .lv .ref{ margin-left:8px; font-size:9px; color:var(--text-muted); border:1px solid var(--border); border-radius:999px; padding:1px 6px; }
+  .lv .lock{ margin-left:6px; font-size:9px; font-weight:700; color:var(--gold-dark); white-space:nowrap; }
+  .lv.locked .val > .dots{ color:var(--text-muted); letter-spacing:.12em; font-weight:700; }
+  .lv.locked .tick{ background:var(--border); }
+  .lv.now .dot{ position:absolute; left:190px; width:14px; height:14px; border-radius:50%; background:var(--accent); box-shadow:var(--glow-cyan); transform:translateY(-7px); }
+  .lv.now .lab{ font-size:12.5px; color:var(--accent); font-weight:700; }
+  .lv.now .val{ font-size:16px; font-weight:700; color:var(--accent); }
+  .lv.now .room{ display:block; margin-top:5px; font-size:10px; color:var(--text-secondary); }
+  .lv.now .room b{ color:var(--text-primary); }
+  .lv.now .room .lk{ color:var(--gold-dark); font-weight:700; }
+
+  /* 3ゾーン (mockup .zbreak / .zwatch / .zlab) */
+  .zbreak{ position:absolute; left:189px; width:16px; border:1px dashed var(--border-strong); border-radius:6px; background:color-mix(in srgb, var(--text-primary) 3%, transparent); }
+  .zwatch{ position:absolute; left:192px; width:10px; border-radius:6px; background:var(--text-muted); opacity:.08; }
+  .zlab{ position:absolute; left:214px; font-size:9px; font-weight:700; letter-spacing:.03em; color:var(--text-muted); line-height:1.25; }
+  .zlab .s{ display:block; font-weight:400; font-size:8.5px; }
+  .zlab.brk{ color:var(--text-secondary); }
+  .zlab.warn{ color:var(--warning); opacity:.9; }
+
+  /* Premium teaser (mockup .pl-teaser) */
+  .teaser{ display:flex; align-items:center; gap:12px; margin-top:12px; border:1px dashed color-mix(in srgb, var(--gold) 55%, transparent); border-radius:10px; padding:10px 13px; background:color-mix(in srgb, var(--gold) 6%, transparent); }
+  .teaser .lk{ font-size:13px; flex-shrink:0; }
+  .teaser .tx{ font-size:11px; line-height:1.5; color:var(--text-secondary); }
+  .teaser .tx b{ color:var(--gold-dark); font-weight:700; }
+  .teaser .cta{ margin-left:auto; font-size:10.5px; font-weight:700; color:var(--gold-dark); white-space:nowrap; }
+  .disc{ font-size:9px; color:var(--text-muted); margin-top:12px; line-height:1.55; }
+</style></head>
+<body>
+  <div class="card">
+    <div class="pl-label">主要な価格水準<span class="en">— 価格ラダー</span><span class="info">ⓘ</span></div>
+    <div class="pl-sub"><b>テクニカル上の節目（目安）</b>。買い点・支持線・損切り基準は Premium。</div>
+    <div class="pl-status"><span class="dot"></span><span class="fact">50日移動平均の上・買い点 Pivot の手前 にあります。</span><span class="chip">地合い: 売り圧力 (7日/25)</span><span class="chip">出来高: 50日平均比 ×0.90</span></div>
+
+    <div class="axis">
+      <div class="rail"></div>
+      <!-- 3ゾーン -->
+      <div class="zbreak" style="top:129px;height:27px"></div>
+      <div class="zlab brk" style="top:110px">ブレイク確認ゾーン<span class="s">Pivot 〜 +5%</span></div>
+      <div class="zwatch" style="top:169px;height:88px"></div>
+      <div class="zlab" style="top:196px">監視<span class="s">ベース形成中</span></div>
+      <div class="zlab warn" style="top:320px">警戒<span class="s">50日線割れ以下</span></div>
+      <!-- 行 (even spacing・高→低) -->
+      <div class="lv" style="top:22px"><span class="tick"></span>
+        <span class="lab">アナリスト目標<span class="sub">コンセンサス・12ヶ月予想</span></span>
+        <span class="val">$326.25<span class="ref">参考</span></span></div>
+      <div class="lv" style="top:90px"><span class="tick"></span>
+        <span class="lab">52週高値</span>
+        <span class="val">$315.20<span class="dist">+7.1%</span></span></div>
+      <div class="lv locked" style="top:158px"><span class="tick"></span>
+        <span class="lab">買い点 Pivot<span class="sub">取っ手付きカップ・ブレイクで確認</span></span>
+        <span class="val"><span class="dots">• • •</span><span class="lock">🔒 Premium</span></span></div>
+      <div class="lv now" style="top:226px"><span class="dot"></span><span class="tick"></span>
+        <span class="lab">現在価格<span class="sub">監視（ベース形成中）</span></span>
+        <span class="val">$294.38
+          <span class="room">ブレイク確認まで <span class="lk">🔒 Premium</span></span></span></div>
+      <div class="lv" style="top:294px"><span class="tick"></span>
+        <span class="lab">50日移動平均</span>
+        <span class="val">$292.67<span class="dist">−0.6%</span></span></div>
+      <div class="lv locked" style="top:362px"><span class="tick"></span>
+        <span class="lab">支持線目安<span class="sub">box support</span></span>
+        <span class="val"><span class="dots">• • •</span><span class="lock">🔒</span></span></div>
+    </div>
+
+    <div class="teaser">
+      <span class="lk">🔒</span>
+      <span class="tx"><b>買い点 Pivot・支持線・損切り基準（買値 −8%）</b> は Premium で開放。取っ手付きカップの買い点・底値帯を数値で。<span style="color:var(--text-muted)">（データが算出された銘柄のみ表示）</span></span>
+      <span class="cta">Premium を見る</span>
+    </div>
+    <div class="disc">※ 各水準はテクニカル上の目安で、将来の値動きや売買タイミングを保証・推奨するものではありません。アナリスト目標は12ヶ月コンセンサス予想（達成保証なし）で、損切り目安とは時間軸が異なります。損切り基準（買値 −8%）はブレイク後にエントリーした後の規律であり、ブレイク前の現在値から逆算する水準ではありません。</div>
+  </div>
+</body></html>
