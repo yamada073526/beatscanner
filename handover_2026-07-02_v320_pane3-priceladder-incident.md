@@ -28,6 +28,11 @@
 
 **次セッション冒頭で必ず**: 「v5 のグラデーション rail は §38 (金商法・断定的判断の提供禁止) の懸念で過去に却下された経緯がある。それでも v5 に合わせますか、それとも v6/v7 (PR #188 の方向性) を採用しますか」を user に再確認してから実装に着手すること。**user 判断を待たずに v5 のグラデーション rail を実装しない**。
 
+## 🟡 v318 から未着手のまま繰り越し (急がない・別ワークストリーム)
+
+- **filed_at 欠落の修正** (バグ・前向き土台・急がない、v318 で root cause 特定済): guidance_snapshots の nightly cron 経路 (`_fetch_sec_guidance_structured`, `backend/app/main.py:6018`) が `_filing_date` を埋めないため、最新期の `guidance_verdict` が常に available:false。修正案 A (恒久: nightly cron 側で filing 日を埋める) / 修正案 B (既存修復: backfill 再実行) の2択。詳細は v318 本体参照 (本 branch 上の履歴 or `git show <v318のcommit>:handover_2026-07-02_v318_sprint4c-s1-close.md`)。
+- **Sprint 4c S2-S4**: 意図的 DEFER 継続中 (データ蓄積が始まる次決算以降まで)。
+
 ## 📁 branch / PR 一覧
 
 - **作業 branch**: `claude/ticker-detail-pane-3-progress-xnotli` (本 handover もこの branch に push)
