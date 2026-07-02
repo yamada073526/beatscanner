@@ -18,7 +18,6 @@ import { useCountUp } from '../hooks/useCountUp.js';
 import { smoothScrollToElement } from '../lib/smoothScroll.js';
 // round11 D: 現在価格行の当日ミニスパークライン (既存 primitive 流用、 module cache 内蔵。
 // 色は当日実績の gain/loss = 業界ルール本来用途で §38 非該当)。
-import RowSparkline from '../features/judgment/components/list/RowSparkline.jsx';
 
 /**
  * PriceLadder — テクニカル章の価格指標を「現在価格を中心とした縦の数直線」 に統合する component。
@@ -104,22 +103,23 @@ function buildTechnicalState({ current, sma50, pivot, support, sma50Dist, retest
 function SectionLabel() {
   return (
     <div style={{ marginBottom: 'var(--space-2, 8px)' }}>
+      {/* 案A: mockup .pl-label 準拠。gold eyebrow「主要な価格水準」+ en「— 価格ラダー」。 */}
       <div style={{
         fontSize: 13,
         fontWeight: 700,
-        letterSpacing: '0.08em',
-        color: 'var(--text-primary)',
-        textTransform: 'uppercase',
+        letterSpacing: '0.03em',
+        color: 'var(--color-gold)',
         display: 'inline-flex',
-        alignItems: 'center',
+        alignItems: 'baseline',
         gap: 'var(--space-2, 8px)',
       }}>
-        価格目安
+        主要な価格水準
+        <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: 0, color: 'var(--text-muted)' }}>— 価格ラダー</span>
         {/* D2 compass Phase B: 状態コンパス「今の価格」と同じ §38-safe 解説モーダル (共有 ⓘ)。 */}
         <CompassInfoButton modalKey="price" ariaLabel="今の価格(テクニカル)の見方" />
       </div>
-      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-        現在価格を基準とした上値・下値の目安
+      <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, lineHeight: 1.4 }}>
+        <b style={{ fontWeight: 700 }}>テクニカル上の節目（目安）</b>。買い点・支持線・損切り基準は Premium。
       </div>
     </div>
   );
@@ -153,7 +153,6 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
   // rangeBox (hover レンジ) と同じ DOM 計測パターンを流用 — 座標のハードコード無し、価格差からの逆算もしない
   // (pivot は Premium ロックのままなので新規の漏洩経路にはならない: 既存レイアウトの縦間隔で暗に示される
   // 相対距離を可視化するだけ)。
-  const [zoneBox, setZoneBox] = useState(null);
   // round8 #1: hover 中の level に対応するチャート線を強調 (data-pl-hl 属性、 CSS 駆動)。
   // round9: あわせて hover 価格を CustomEvent で通知 → チャートが点線ガイドを表示 (52週/損切り等、
   // 固有の線が無い level も全行反応)。
@@ -336,28 +335,8 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
     return { levels: raw, current, sma50Dist, distCount, stateText, volRatio, pivot, isBreakoutConfirmed };
   }, [analyst, technical, priceData, ticker]);
 
-  // v7 リッチ化 (2026-07-02 user gate): ブレイク未確認 (現在値 < pivot) のときのみ、pivot 行の上端 〜
-  // 現在価格行の下端をブラケット表示。ブレイク確認後・pivot 未検出時は zoneBox=null で非表示 (§38: 常時表示にしない)。
-  // rangeBox (hover レンジ) と同じ DOM 計測パターンを流用 — 座標のハードコード無し、価格差からの逆算もしない
-  // (pivot は Premium ロックのままなので新規の漏洩経路にはならない: 既存レイアウトの縦間隔で暗に示される
-  // 相対距離を可視化するだけ)。
-  // ⚠️ 2026-07-02 incident: 本 effect を pivot/current/levels の useMemo より前に置いた版が
-  // TDZ ReferenceError ("Cannot access 'pivot' before initialization") で本番全クラッシュを起こした
-  // (handover 参照)。必ず上記 useMemo の後に置くこと。
-  useLayoutEffect(() => {
-    const c = containerRef.current;
-    if (!c || !Number.isFinite(pivot) || !Number.isFinite(current) || current >= pivot) {
-      setZoneBox(null);
-      return;
-    }
-    const pivotEl = c.querySelector('[data-testid="price-ladder-row-pivot"]');
-    const curEl = c.querySelector('[data-testid="price-ladder-row-current"]');
-    if (!pivotEl || !curEl) { setZoneBox(null); return; }
-    const cr = c.getBoundingClientRect();
-    const pr = pivotEl.getBoundingClientRect();
-    const ur = curEl.getBoundingClientRect();
-    setZoneBox({ top: pr.top - cr.top, height: Math.max(2, (ur.top + ur.height) - pr.top) });
-  }, [pivot, current, levels]);
+  // 案A (2026-07-02 user gate): ブレイク確認ゾーン/監視/警戒の 3ゾーンは、rail中央 absolute レイアウトの
+  // row index から container 内で直接算出する (下部 return 参照)。旧 zoneBox useLayoutEffect (DOM 計測) は撤去。
 
   // loading: CLS envelope (minHeight) + skeleton
   if (loading && !priceData) {
@@ -454,6 +433,10 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
         let seq = 0;
         const stagger = () => ({ animationDelay: `${(seq++) * 40}ms` });
 
+        // 案A: mockup 準拠の表示ラベル / sub ラベル override (実データ label と mockup 文言差を吸収)。
+        const DISP_LABEL = { pivot: '買い点 Pivot', support: '支持線目安' };
+        const SUB_LABEL = { target: 'コンセンサス・12ヶ月予想', pivot: '取っ手付きカップ・ブレイクで確認', support: 'box support' };
+
         const levelRow = (l, extra = null) => {
           const lk = isLocked(l);
           // ロック行は距離% も出さない (price/current から逆算でき = 漏洩)。 非ロック時のみ算出。
@@ -464,82 +447,42 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
           //   pivot/support は CHART_LINKED に残るため、 配線すると hover で chart に点線ガイド + data-pl-hl で
           //   ロック価格が漏洩する。 → .pl-level を付けず (hover 強調なし)、 onMouseEnter/onClick も undefined。
           const interactive = !lk;
+          const isTarget = l.key === 'target';
           return (
             <div
               key={l.key}
               data-testid={`price-ladder-row-${l.key}`}
               data-locked={lk ? 'true' : undefined}
-              className={`pl-row${interactive ? ` pl-level${chartHoverKey === l.key ? ' pl-level-hl' : ''}` : ''}`}
+              className={`pl-lv pl-row${lk ? ' is-locked' : ''}${interactive ? ` pl-level${chartHoverKey === l.key ? ' pl-level-hl' : ''}` : ''}`}
               // round8 #2: spine 区間ハイライト / #1: チャート対応線の強調 + 価格ガイド / #3: click でチャートへ
               onMouseEnter={interactive ? () => { setHoverKey(l.key); setChartHl(l.key, l.price); } : undefined}
               onMouseLeave={interactive ? () => { setHoverKey(null); setChartHl(null, null); } : undefined}
               onClick={(interactive && CHART_LINKED.has(l.key)) ? () => flashChart(l.key) : undefined}
-              // round9 (user「なぞるとカクカク」): hover の拡大/浮き上がりは内側 .pl-level-inner に適用し、
-              // 外側 (当たり判定) の geometry を固定する (transform-on-hover jitter 対策)。
-              style={{
-                cursor: (interactive && CHART_LINKED.has(l.key)) ? 'pointer' : undefined,
-                opacity: lk ? 0.6 : undefined,
-                ...stagger(),
-                ...(extra || {}),
-              }}
+              style={{ cursor: (interactive && CHART_LINKED.has(l.key)) ? 'pointer' : undefined, ...stagger(), ...(extra || {}) }}
             >
-              <div
-                className="pl-level-inner"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 'var(--space-3, 12px)',
-                  padding: 'var(--space-2, 8px) 0',
-                  paddingLeft: 'var(--space-5, 20px)',
-                  paddingRight: 'var(--space-3, 12px)',
-                }}
-              >
-              <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)', minWidth: 0 }}>
-                {/* 線サンプル swatch: チャート凡例と 1:1 (identity 色 3 つのみ、 他は中立 — §38)。
-                    ロック行は対応線を強調しない (漏洩防止) ため swatch も border 色で中立化 (mockup .lv.locked .tick)。 */}
-                <span
-                  className="pl-swatch"
-                  aria-hidden="true"
-                  style={{
-                    width: 14,
-                    height: 2.5,
-                    borderRadius: 2,
-                    flexShrink: 0,
-                    background: lk ? 'var(--border)' : (LEVEL_SWATCH[l.key] || NEUTRAL_SWATCH),
-                  }}
-                />
-                {/* label/price の色は hover 増光のため CSS class へ (inline だと :hover で上書きできない) */}
-                <span className="pl-level-label" style={{ fontSize: 12, fontWeight: 500 }}>{l.label}</span>
+              {/* 案A rail中央レイアウト: ラベル(右揃え・rail左) / tick(rail から) / 値(rail右)。§38: dist 中立色。 */}
+              <span className="pl-lv-lab">
+                <span className="pl-level-label">{DISP_LABEL[l.key] || l.label}</span>
+                {SUB_LABEL[l.key] ? <span className="sub">{SUB_LABEL[l.key]}</span> : null}
               </span>
-              <span style={{ position: 'relative', display: 'flex', alignItems: 'baseline', gap: 'var(--space-3, 12px)' }}>
+              <span className="pl-lv-tick" aria-hidden="true" />
+              <span className="pl-lv-val">
                 {lk ? (
-                  // G2 ロック表示: 値は • • • (letter-spacing) + 🔒 Premium。 count-up pf は適用しない (値を出さない)。
-                  <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6 }}>
-                    <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>• • •</span>
-                    <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--color-gold-dark)', whiteSpace: 'nowrap' }}>
-                      <span aria-hidden="true">🔒 </span>Premium
-                    </span>
-                  </span>
+                  // G2 ロック表示: 値は • • • + 🔒 (値を出さない)。mockup 準拠: pivot 行のみ "Premium" 文言併記
+                  // (最初のロック行で何がロックされているか明示、support 行以降は繰り返さず簡潔に)。
+                  <>
+                    <span className="pl-lv-dots">• • •</span>
+                    <span className="pl-lv-lock"><span aria-hidden="true">🔒</span>{l.key === 'pivot' ? ' Premium' : ''}</span>
+                  </>
                 ) : (
                   <>
-                    {/* round6: 距離% と同じ pf 係数で 0→実値。 0 起点は方向非示唆の中立演出 (§38)。 */}
-                    <span className="pl-level-price" style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums' }}>{fmtUsd(l.price * pf)}</span>
-                    <span style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)', minWidth: 72, textAlign: 'right' }}>
-                      {dist != null ? `現在から ${fmtPct(dist * pf)}` : '—'}
-                    </span>
-                    {/* round4 (hover micro-bar): 距離の絶対値に比例した中立バー (方向色なし、 §38 セーフ)。 */}
-                    {dist != null && (
-                      <span
-                        className="pl-distbar"
-                        aria-hidden="true"
-                        style={{ '--pl-bar': `${Math.round(Math.min(Math.abs(dist), 50) * 2.4)}px` }}
-                      />
-                    )}
+                    {fmtUsd(l.price * pf)}
+                    {isTarget
+                      ? <span className="pl-lv-ref">参考</span>
+                      : (dist != null && <span className="pl-lv-dist">{fmtPct(dist * pf)}</span>)}
                   </>
                 )}
               </span>
-              </div>
             </div>
           );
         };
@@ -555,129 +498,97 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
           const pivotDistPct = preBreakoutUp ? (pivot / current - 1) * 100 : null;
           const showRoom = preBreakoutUp || isBreakoutConfirmed;
           return (
-          <div
-            key={l.key}
-            data-testid={`price-ladder-row-${l.key}`}
-            className="pl-row pl-level"
-            style={{
-              position: 'relative',
-              ...stagger(),
-              ...(extra || {}),
-            }}
-          >
-            {/* spine 上の accent tick (現在価格アンカー、 §38 中立ブランド色)。 .pl-tick = scaleX 0→1 入場 */}
-            <span aria-hidden="true" className="pl-tick" style={{
-              position: 'absolute',
-              left: 'calc(-1 * var(--space-4, 16px) - 1px)',
-              // round6 (user「●が文字中心より若干上」): baseline 行内の視覚中心に合わせ +2px 下げ
-              top: 'calc(50% + 2px)',
-              transform: 'translateY(-50%)',
-              width: 11,
-              height: 3,
-              borderRadius: 2,
-              background: 'var(--color-accent)',
-            }} />
-            <div className="pl-level-inner" style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--space-3, 12px)', padding: 'var(--space-3, 12px) 0', paddingRight: 'var(--space-3, 12px)' }}>
-              {/* round12 (user 採用①+③): 当日スパークライン (round11 D) を価格の隣 → ラベル横へ一体化。
-                  価格側に置くと「どの期間の波形か」 の帰属が浮いて見えた → ラベルと同じ視線グループに移し、
-                  小さな「当日」 キャプションで帰属を明示 (intraday 5分足、 gain/loss 色は実績の本来用途 = §38 OK)。 */}
-              <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)', minWidth: 0 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{l.label}</span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }} aria-hidden="true">
-                  <RowSparkline ticker={ticker} period="1d" width={52} height={16} />
-                  <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', color: 'var(--text-muted)' }}>当日</span>
-                </span>
+            <div
+              key={l.key}
+              data-testid={`price-ladder-row-${l.key}`}
+              className="pl-lv is-now pl-row pl-level"
+              style={{ ...stagger(), ...(extra || {}) }}
+            >
+              {/* 案A rail中央: 現在価格 = rail 上の cyan dot+発光 (token --shadow-glow-cyan-reading) + accent ラベル/値。
+                  §38: room の「ブレイク確認まで」 は pivot ロック時 Premium 逆算% を漏らさず 🔒 のみ。損切りは累進開示。 */}
+              <span className="pl-lv-lab">
+                現在価格
+                <span className="sub">{preBreakoutUp ? '監視（ベース形成中）' : '当日'}</span>
               </span>
-              <span style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3, 12px)' }}>
-                <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{fmtUsd(l.price * pf)}</span>
-                <span style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)', minWidth: 72, textAlign: 'right' }}>
-                  {Number.isFinite(sma50Dist) ? `50DMA ${fmtPct(sma50Dist * pf)}` : '基準'}
-                </span>
-              </span>
-            </div>
-            {showRoom && (
-              <div
-                data-testid="price-ladder-room"
-                style={{ paddingLeft: 'var(--space-5, 20px)', marginTop: 2, display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3, 12px)', fontSize: 10, lineHeight: 1.3 }}
-              >
-                {preBreakoutUp && (
-                  <span style={{ color: 'var(--text-secondary)' }}>
-                    ブレイク確認まで{' '}
-                    {pivotLocked ? (
-                      <span style={{ color: 'var(--color-gold-dark)', fontWeight: 700 }}>
-                        <span aria-hidden="true">🔒 </span>Premium
-                      </span>
-                    ) : (
-                      <b style={{ color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{fmtPct(pivotDistPct)}</b>
+              <span className="pl-lv-dot" aria-hidden="true" />
+              <span className="pl-lv-val">
+                {fmtUsd(l.price * pf)}
+                {showRoom && (
+                  <span className="pl-lv-room" data-testid="price-ladder-room">
+                    {preBreakoutUp && (
+                      <>ブレイク確認まで{' '}
+                        {pivotLocked
+                          ? <span className="lk"><span aria-hidden="true">🔒 </span>Premium</span>
+                          : <b>{fmtPct(pivotDistPct)}</b>}
+                      </>
+                    )}
+                    {isBreakoutConfirmed && (
+                      <span style={{ color: 'var(--color-warning)' }}> 損切り目安 買値 −8%</span>
                     )}
                   </span>
                 )}
-                {isBreakoutConfirmed && (
-                  <span style={{ color: 'var(--color-warning)' }}>損切り目安 買値 −8%</span>
-                )}
-              </div>
-            )}
-          </div>
+              </span>
+            </div>
           );
         };
 
+        // 案A: even 行間 (mockup .lv の絶対px配置を実データ順に一般化)。行を高→低で等間隔に絶対配置。
+        const ROW_GAP = 68, TOP_PAD = 24, BOTTOM_PAD = 34;
+        const rowTopPx = (i) => TOP_PAD + i * ROW_GAP;
+        const AXIS_H = TOP_PAD + Math.max(0, levels.length - 1) * ROW_GAP + BOTTOM_PAD;
+        const pivotIdx = levels.findIndex((l) => l.key === 'pivot');
+        const curIdx = levels.findIndex((l) => l.isCurrent);
+        const sma50Idx = levels.findIndex((l) => l.key === 'sma50');
+        // 3ゾーンの位置は row index から算出 (DOM 計測不要)。§38: ブレイク確認は pivot の上のみ・ブレイク未確認時。
+        const zBrkShow = pivotIdx >= 0 && Number.isFinite(pivot) && Number.isFinite(current) && current < pivot;
+        const zBrkTop = zBrkShow ? Math.max(0, rowTopPx(pivotIdx) - 30) : 0;
+        const zWatchShow = pivotIdx >= 0 && curIdx > pivotIdx;
+        const zWatchTop = zWatchShow ? rowTopPx(pivotIdx) + 12 : 0;
+        const zWatchH = zWatchShow ? Math.max(10, rowTopPx(curIdx) - rowTopPx(pivotIdx) + 6) : 0;
+        const zWarnShow = sma50Idx >= 0 && sma50Idx < levels.length - 1;
+        const zWarnTop = zWarnShow ? rowTopPx(sma50Idx) + 26 : 0;
         return (
           <div
-            // v195 round3: 視界進入で data-pl-inview が付き、 index.css 側で .pl-row/.pl-tick の
-            // animation が arming される (mount 起点だと画面外で再生済になる真因の修正)。
-            // round4: spine を borderLeft → 子要素 .pl-spine に変更 (視界進入時に上→下へ描画される
-            // draw アニメ用。 「軸が先に降りて、 目盛りが乗る」 演出順)。
-            // useInViewOnce (callback ref) と DOM 測定用 ref を同じ要素へ merge
+            // v195 round3: 視界進入で data-pl-inview → index.css 側で .pl-row/.pl-lv-dot の animation arming。
+            // useInViewOnce (callback ref) と DOM 測定用 ref を同じ要素へ merge。
+            // 案A (2026-07-02 user gate): mockup pane3-full-v7 の rail中央 .axis レイアウトへ移植 (承認 target
+            // docs/specs/mockups/pane3-priceladder-target-A.html)。行は absolute + even 間隔。
             ref={(el) => { ladderRef(el); containerRef.current = el; }}
+            className="pl-axis"
             data-pl-inview={ladderInView ? 'true' : undefined}
-            style={{
-              position: 'relative',
-              paddingLeft: 'var(--space-4, 16px)',
-              // round7: hover 拡大 (scale 1.012、 center 基準) のはみ出し ~8px/側 の逃げ場。
-              // 全行一律なので右端整列は保たれる (pane 外への見切れ解消)。
-              paddingRight: 'var(--space-3, 12px)',
-            }}
+            style={{ position: 'relative', height: AXIS_H }}
           >
-            <span className="pl-spine" aria-hidden="true" />
-            {/* round8 #2: hover 行 ⇄ 現在価格 の「距離レンジ」 を spine 上に accent 表示 (数直線メタファ強化、
-                §38: 中立ブランド色 + 距離の事実可視化のみ) */}
+            <span className="pl-rail" aria-hidden="true" />
+            {/* round8 #2: hover 行 ⇄ 現在価格 の距離レンジを rail 上に accent 表示 (§38: 中立ブランド色) */}
             {rangeBox && (
-              <span className="pl-spine-range" aria-hidden="true" style={{ top: rangeBox.top, height: rangeBox.height }} />
+              <span className="pl-spine-range" aria-hidden="true" style={{ left: 195, top: rangeBox.top, height: rangeBox.height }} />
             )}
-            {/* v7 リッチ化: ブレイク確認ゾーン (pivot 行 〜 現在価格行) の破線ブラケット。中立色のみ (§38)。 */}
-            {zoneBox && (
+            {/* 3ゾーン (mockup .zbreak/.zwatch/.zlab): ブレイク確認=pivot上(Pivot〜+5%)/監視=pivot下/警戒=50日線割れ以下。 */}
+            {zBrkShow && (
               <>
-                <span
-                  className="pl-zone-bracket"
-                  aria-hidden="true"
-                  data-testid="price-ladder-zone-bracket"
-                  style={{ top: zoneBox.top, height: zoneBox.height }}
-                />
-                <span
-                  className="pl-zone-label"
-                  aria-hidden="true"
-                  style={{ top: zoneBox.top + zoneBox.height / 2 - 14, lineHeight: 1.25 }}
-                >
-                  ブレイク確認<br />ゾーン
+                <span className="pl-zbrk" aria-hidden="true" data-testid="price-ladder-zone-bracket" style={{ top: zBrkTop, height: 27 }} />
+                <span className="pl-zlab is-brk" aria-hidden="true" style={{ top: Math.max(0, zBrkTop - 20) }}>
+                  ブレイク確認ゾーン<span className="s">Pivot 〜 +5%</span>
                 </span>
               </>
             )}
-            {/* round11 A → Phase2 task3: 縮尺固定 (toggle 撤去・Q3 user 判断)。 冠/ゾーン・前回比行も撤去し
-                空間そのものに語らせる (本物の数直線)。 行間 = 価格差の sqrt に比例 + 上限 cap (近接水準が
-                下限 4px に張り付く「スカスカ」 回避: 遠距離を sqrt 圧縮、 合計を SCALE_PX へ正規化、 1 区間の
-                突出を CAP_PX で頭打ち)。 */}
-            {(() => {
-              const sqrtGaps = levels.map((l, i) => (i === 0 ? 0 : Math.sqrt(Math.max(0, levels[i - 1].price - l.price))));
-              const totalSqrt = sqrtGaps.reduce((a, b) => a + b, 0) || 1;
-              const SCALE_PX = 340;
-              const CAP_PX = 72;
-              return levels.map((l, i) => {
-                const extra = i === 0 ? null : {
-                  marginTop: Math.round(Math.min(CAP_PX, Math.max(4, (sqrtGaps[i] / totalSqrt) * SCALE_PX))),
-                };
-                return l.isCurrent ? currentRow(l, extra) : levelRow(l, extra);
-              });
-            })()}
+            {zWatchShow && (
+              <>
+                <span className="pl-zwatch" aria-hidden="true" data-testid="price-ladder-zone-watch" style={{ top: zWatchTop, height: zWatchH }} />
+                <span className="pl-zlab" aria-hidden="true" style={{ top: zWatchTop + Math.max(0, zWatchH / 2 - 12) }}>
+                  監視<span className="s">ベース形成中</span>
+                </span>
+              </>
+            )}
+            {zWarnShow && (
+              <span className="pl-zlab is-warn" aria-hidden="true" data-testid="price-ladder-zone-warn" style={{ top: zWarnTop }}>
+                警戒<span className="s">50日線割れ以下</span>
+              </span>
+            )}
+            {levels.map((l, i) => {
+              const extra = { position: 'absolute', top: rowTopPx(i) };
+              return l.isCurrent ? currentRow(l, extra) : levelRow(l, extra);
+            })}
           </div>
         );
       })()}
@@ -778,7 +689,8 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
         fontStyle: 'italic',
         lineHeight: 1.5,
       }}>
-        ※ 各価格は目安。テクニカル分析は将来の値動きを保証するものではありません。
+        ※ 各水準はテクニカル上の目安で、将来の値動きや売買タイミングを保証・推奨するものではありません。
+        損切り基準（買値 −8%）はブレイク後にエントリーした後の規律であり、ブレイク前の現在値から逆算する水準ではありません。
       </p>
     </div>
   );

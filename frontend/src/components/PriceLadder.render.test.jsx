@@ -46,13 +46,18 @@ afterEach(() => {
 });
 
 describe('PriceLadder (render smoke test)', () => {
-  it('AAPL 相当 (pivot 検出・ブレイク未確認) のデータで render エラーを投げない', async () => {
+  it('AAPL 相当 (pivot 検出・ブレイク未確認) で render エラーを投げず、ブレイク確認ゾーンが描画される', async () => {
     render(<PriceLadder ticker="AAPL" plan="free" />);
     // 主 UI (価格目安 見出し) が表示され、error boundary 相当の例外が render 中に投げられないことを確認。
-    await screen.findByText('価格目安');
+    await screen.findByText(/主要な価格水準/);
     await screen.findByTestId('price-ladder-row-current');
-    // ブレイク未確認ゾーンブラケットが (jsdom の getBoundingClientRect は 0 だが) throw せずに描画されること。
-    expect(screen.queryByTestId('price-ladder')).toBeTruthy();
+    // ブレイク未確認ゾーンブラケット (Pivot 〜 +5%・pivot の「上」) が pivot 行検出時に描画されること
+    // (2026-07-02 drift 修正: pivot 下ではなく上に表示。jsdom の getBoundingClientRect は 0 だが zoneBox は truthy)。
+    expect(await screen.findByTestId('price-ladder-zone-bracket')).toBeTruthy();
+    // 監視ゾーン (pivot 下〜現在価格) も同時に描画される (mockup .zwatch 準拠、案A 忠実化で追加)。
+    expect(await screen.findByTestId('price-ladder-zone-watch')).toBeTruthy();
+    // 警戒ゾーン (50日線割れ以下) も row index から算出され描画される。
+    expect(await screen.findByTestId('price-ladder-zone-warn')).toBeTruthy();
   });
 
   it('pivot 未検出 (cup_handle なし) でも render エラーを投げない', async () => {
@@ -62,7 +67,7 @@ describe('PriceLadder (render smoke test)', () => {
       overlays: [{ key: 'sma_50', data: [{ value: 292.67 }] }],
     });
     render(<PriceLadder ticker="MSFT" plan="free" />);
-    await screen.findByText('価格目安');
+    await screen.findByText(/主要な価格水準/);
     await screen.findByTestId('price-ladder-row-current');
     expect(screen.queryByTestId('price-ladder-zone-bracket')).toBeNull();
   });
@@ -76,7 +81,7 @@ describe('PriceLadder (render smoke test)', () => {
       overlays: [{ key: 'sma_50', data: [{ value: 292.67 }] }],
     });
     render(<PriceLadder ticker="AAPL" plan="premium" />);
-    await screen.findByText('価格目安');
+    await screen.findByText(/主要な価格水準/);
     await screen.findByTestId('price-ladder-row-current');
     // ブレイク確認済 = zoneBox は非表示 (pivot 行〜現在価格行のブラケットは未確認状態専用)。
     expect(screen.queryByTestId('price-ladder-zone-bracket')).toBeNull();

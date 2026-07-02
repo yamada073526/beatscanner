@@ -13020,35 +13020,12 @@ body.is-digest-resizing {
      stagger (上の行から順) と合わさり「上から下へ」 の流れも復活する。 */
   from { opacity: 0; transform: translateX(-14px) translateY(8px); }
 }
-@keyframes pl-tick-in {
-  /* tick は inline transform translateY(-50%) を持つため from にも含める (上書き事故防止) */
-  from { transform: translateY(-50%) scaleX(0); }
-}
-/* round4 (user 4案 全採用): spine draw / tick 呼吸 pulse */
-@keyframes pl-spine-in {
-  from { transform: scaleY(0); }
-}
-@keyframes pl-tick-pulse {
-  /* round5 (user「言われないと気付かない」): opacity 深く + scaleX で「脈」 を視覚化、 周期 2.4s に短縮。
-     transform は inline translateY(-50%) を全 frame に含める (上書き事故防止)。 */
-  0%, 100% { opacity: 1; transform: translateY(-50%) scaleX(1); }
-  50% { opacity: 0.4; transform: translateY(-50%) scaleX(1.45); }
-}
 @keyframes pl-dot-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
 }
 
 /* ── 静的 base (reduced-motion でも適用される土台) ── */
-/* spine: borderLeft → 子要素化 (draw アニメ用)。 静的には従来と同じ 2px 縦線 */
-.pl-spine {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--border);
-}
 /* ── round8 #1/#3: ladder ⇄ チャート連動 ──
    ladder の行 hover で .ds-judgment-detail に data-pl-hl=<key>、 click で data-pl-flash=<key> が付き、
    チャート側の対応線 (.pl-chartline-*、 StockPriceChart に className 付与済) を CSS で強調する。
@@ -13129,32 +13106,14 @@ body.is-digest-resizing {
   color: var(--text-primary);
 }
 
-/* label/price の base 色 (inline から移動 — hover 増光を CSS で上書きするため)。
+/* label の base 色 (inline から移動 — hover 増光を CSS で上書きするため)。
    round11 B: .pl-level-hl (チャート線 hover の逆連動) でも同じ強調。 */
-.pl-level-label,
-.pl-level-price {
+.pl-level-label {
   color: var(--text-secondary);
 }
 .pl-level:hover .pl-level-label,
-.pl-level:hover .pl-level-price,
-.pl-level-hl .pl-level-label,
-.pl-level-hl .pl-level-price {
+.pl-level-hl .pl-level-label {
   color: var(--text-primary);
-}
-/* hover micro-bar: 距離|%| に比例した中立バー (JSX が --pl-bar を行ごとに供給)。 方向色なし = §38 セーフ */
-.pl-distbar {
-  position: absolute;
-  right: 0;
-  bottom: -4px;
-  /* round5 (user「もっと目立たせて」): 2px→3px + muted 45% → accent 45% (中立ブランド色、 方向色でない) */
-  height: 3px;
-  width: 0;
-  border-radius: 1.5px;
-  background: color-mix(in srgb, var(--color-accent) 45%, transparent);
-}
-.pl-level:hover .pl-distbar,
-.pl-level-hl .pl-distbar {
-  width: var(--pl-bar, 0px);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -13164,21 +13123,9 @@ body.is-digest-resizing {
   [data-pl-inview="true"] .pl-row {
     animation: pl-row-in 360ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
   }
-  /* tick: 入場 (scaleX) → 1.4s 後から呼吸 (round5: 2.4s 周期 + scaleX 脈で強調)。 §38 中立 accent のまま */
-  [data-pl-inview="true"] .pl-tick {
-    transform-origin: left center;
-    animation:
-      pl-tick-in 200ms ease-out 240ms backwards,
-      pl-tick-pulse 2.4s ease-in-out 1400ms infinite;
-  }
   /* round5: サマリーの状態 dot もゆっくり点滅 (tick と同じ「ライブ」 語彙、 自己主張を足す) */
   .pl-status-dot {
     animation: pl-dot-pulse 2.4s ease-in-out infinite;
-  }
-  /* spine: 視界進入時に上→下へ描画 (「軸が先に降りて、 目盛りが乗る」)。 行 stagger より先に走る */
-  [data-pl-inview="true"] .pl-spine {
-    transform-origin: top center;
-    animation: pl-spine-in 500ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
   }
   /* arming 前は不可視 (進入時に opacity 0 から着地させるため)。 reduced-motion はこの media 外なので常時可視 */
   .pl-row {
@@ -13187,54 +13134,9 @@ body.is-digest-resizing {
   [data-pl-inview="true"] .pl-row {
     opacity: 1;
   }
-  /* ── hover 合成 (ui-designer round4): 行 lift + bg sweep + swatch spring + 増光 + micro-bar ──
-     「ゲージを回すように選択行が手前に来る」 (user 案)。 box-shadow 不使用 = 発光 host 化しない */
-  /* round9 (user「なぞるとカクカク」): 拡大/浮き上がりは内側 .pl-level-inner に適用し、 外側 (hover 当たり判定)
-     の geometry を固定 — 旧: 行自体が scale して境界で hover が揺れる transform-on-hover jitter が真因。
-     transform の easing も overshoot → ease-out にして連続なぞりを滑らかに (swatch の spring は維持)。 */
-  .pl-level-inner {
-    border-radius: var(--radius-sm, 6px);
-    /* round7: center 基準 + 1.012 (origin left だと拡大分が全て右へ伸び pane 外で clip) */
-    transform-origin: center center;
-    /* sweep は background-size 方式 (round5: accent 14%)。 accent の薄塗りが左→右に流れる */
-    background-image: linear-gradient(
-      color-mix(in srgb, var(--color-accent) 14%, transparent),
-      color-mix(in srgb, var(--color-accent) 14%, transparent)
-    );
-    background-repeat: no-repeat;
-    background-size: 0% 100%;
-    transition:
-      transform 150ms ease-out,
-      background-size 200ms ease-out,
-      background-color 180ms ease-out,
-      box-shadow 180ms ease-out;
-  }
-  /* round6: scale + lift + token shadow (--shadow-3 = whitelist 済)。 bg-subtle 板で影を活かす。
-     発光 host 化ではない (panel-card/arrival glow 系 class 不使用、 spotlight 監視対象外)。 */
-  .pl-level:hover .pl-level-inner,
-  .pl-level-hl .pl-level-inner {
-    transform: translateY(-2px) scale(1.012);
-    background-color: var(--bg-subtle);
-    background-size: 100% 100%;
-    box-shadow: var(--shadow-3);
-  }
-  /* round11 A: 縮尺⇄等間隔 切替時に行間が滑らかに再配置 */
-  .pl-level {
-    transition: margin-top 280ms ease-out;
-  }
-  .pl-level-label,
-  .pl-level-price {
+  /* hover 増光 (label 色のみ、 案A rail中央レイアウトでは lift/bg-sweep/swatch/distbar は撤去済 — 2026-07-02) */
+  .pl-level-label {
     transition: color 160ms ease-out;
-  }
-  .pl-swatch {
-    transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
-  .pl-level:hover .pl-swatch,
-  .pl-level-hl .pl-swatch {
-    transform: scaleX(1.6) scaleY(1.8);
-  }
-  .pl-distbar {
-    transition: width 220ms ease-out;
   }
   /* 別の行へ hover が移るとレンジが滑らかに伸縮 (round11: 160→340ms ease-in-out、
      user「動きが早すぎてカクカク。 緩やかなら行移動時の伸縮がわかりやすい」) */
@@ -13268,30 +13170,101 @@ body.is-digest-resizing {
   50% { opacity: 0.2; }
 }
 
-/* ── 価格目安 リッチ化 (mockup pane3-full-v7.html §③ 準拠、user gate 2026-07-02)。
-   却下済み要素 (⏳ / verdict confirm の cyan グラデーション、2026-06-30 3体合議+user gate) は再現しない。
-   ブレイク確認ゾーン: pivot 行 〜 現在価格行 の範囲を破線ブラケットで可視化。中立色のみ (§38: amber/gain 不使用)。
-   位置は JSX 側 (PriceLadder.jsx zoneBox state) で rangeBox と同じ DOM 計測パターンにより算出 (ハードコード無し)。 */
-.pl-zone-bracket {
+/* ── 価格ラダー 案A: mockup pane3-full-v7 .axis 準拠の rail中央レイアウト (user gate 2026-07-02、承認 target
+   docs/specs/mockups/pane3-priceladder-target-A.html)。旧 spine左 number-line を置換。
+   §38: dist% は中立色 (緑赤にしない)・現在価格 room は Premium 逆算% を漏らさない・損切り(リスク確認ライン)行は
+   累進開示 (ブレイク未確認時は非表示)。glow は token 経由 (--shadow-glow-cyan、brand emphasis 用・scope制限なし) で design-check セーフ。 */
+.pl-axis { position: relative; }
+.pl-rail {
   position: absolute;
-  left: calc(-1 * var(--space-4, 16px) - 7px);
-  width: 14px;
-  border-left: 2px dashed var(--border-strong);
-  border-top: 2px dashed var(--border-strong);
-  border-bottom: 2px dashed var(--border-strong);
-  border-radius: 6px 0 0 6px;
-  pointer-events: none;
+  left: 196px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: var(--border);
+  border-radius: 2px;
 }
-.pl-zone-label {
+.pl-lv { position: absolute; left: 0; right: 0; height: 0; }
+.pl-lv-lab {
   position: absolute;
-  left: calc(-1 * var(--space-4, 16px) + 10px);
+  right: calc(100% - 184px);
+  width: 184px;
+  text-align: right;
+  padding-right: 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.25;
+}
+.pl-lv-lab .sub { display: block; font-size: 9px; color: var(--text-muted); margin-top: 1px; }
+.pl-lv-tick {
+  position: absolute;
+  left: 186px;
+  width: 18px;
+  height: 1px;
+  background: var(--border-strong);
+  top: 0;
+}
+.pl-lv-val {
+  position: absolute;
+  left: 214px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.pl-lv-dist { margin-left: 8px; font-size: 10.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.pl-lv-ref {
+  margin-left: 8px;
+  font-size: 9px;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill, 999px);
+  padding: 1px 6px;
+}
+.pl-lv-lock { margin-left: 6px; font-size: 9px; font-weight: 700; color: var(--color-gold-dark); white-space: nowrap; }
+.pl-lv-dots { color: var(--text-muted); letter-spacing: 0.12em; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pl-lv.is-locked { opacity: 0.6; }
+.pl-lv.is-locked .pl-lv-tick { background: var(--border); }
+.pl-lv-dot {
+  position: absolute;
+  left: 190px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  /* ui-designer レビュー指摘 (2026-07-02): --shadow-glow-cyan-reading は design_recipes.md §-1-B で
+     `.bs-mode-reading` scope 内限定と明記 (reading scope 外への流出禁止)。ここは scope 外のため
+     scope制限のない汎用 brand emphasis token --shadow-glow-cyan に修正。 */
+  box-shadow: var(--shadow-glow-cyan);
+  transform: translateY(-7px);
+}
+.pl-lv.is-now .pl-lv-lab { font-size: 12.5px; color: var(--color-accent); font-weight: 700; }
+.pl-lv.is-now .pl-lv-val { font-size: 16px; font-weight: 700; color: var(--color-accent); }
+.pl-lv-room { display: block; margin-top: 5px; font-size: 10px; color: var(--text-secondary); }
+.pl-lv-room b { color: var(--text-primary); }
+.pl-lv-room .lk { color: var(--color-gold-dark); font-weight: 700; white-space: nowrap; }
+/* 3ゾーン: ブレイク確認 (.pl-zbrk = pivot 上の破線角丸) / 監視 (.pl-zwatch 薄帯) / 警戒 (.pl-zlab.is-warn ラベルのみ) */
+.pl-zbrk {
+  position: absolute;
+  left: 189px;
+  width: 16px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+}
+.pl-zwatch { position: absolute; left: 192px; width: 10px; border-radius: 6px; background: var(--text-muted); opacity: 0.08; }
+.pl-zlab {
+  position: absolute;
+  left: 214px;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.03em;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  pointer-events: none;
+  color: var(--text-muted);
+  line-height: 1.25;
 }
+.pl-zlab .s { display: block; font-weight: 400; font-size: 8.5px; }
+.pl-zlab.is-brk { color: var(--text-secondary); }
+.pl-zlab.is-warn { color: var(--color-warning); opacity: 0.9; }
 
 /* ── 出来高ゲージ (mockup .bo 準拠、inline style → CSS class 化)。判定ロジック (閾値/達成) は不変。 */
 .pl-vgauge-track {
