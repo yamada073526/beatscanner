@@ -30,8 +30,9 @@
 
 ## 🟡 v318 から未着手のまま繰り越し (急がない・別ワークストリーム)
 
-- **filed_at 欠落の修正** (バグ・前向き土台・急がない、v318 で root cause 特定済): guidance_snapshots の nightly cron 経路 (`_fetch_sec_guidance_structured`, `backend/app/main.py:6018`) が `_filing_date` を埋めないため、最新期の `guidance_verdict` が常に available:false。修正案 A (恒久: nightly cron 側で filing 日を埋める) / 修正案 B (既存修復: backfill 再実行) の2択。詳細は v318 本体参照 (本 branch 上の履歴 or `git show <v318のcommit>:handover_2026-07-02_v318_sprint4c-s1-close.md`)。
+- **filed_at 欠落の修正** (バグ・前向き土台・急がない、v318 で **root cause (コード読み + DB 照会で特定)** 済): guidance_snapshots の nightly cron 経路 (`_fetch_sec_guidance_structured`, `backend/app/main.py:6018`) が `_filing_date` を埋めないため、最新期の `guidance_verdict` が常に available:false。**修正案 A（恒久）**: nightly cron 側で filing 日を埋める。**修正案 B（既存修復）**: backfill 再実行。詳細は `git show <v318のcommit>:handover_2026-07-02_v318_sprint4c-s1-close.md` 参照。
 - **Sprint 4c S2-S4**: 意図的 DEFER 継続中 (データ蓄積が始まる次決算以降まで)。
+- v318 記載の「**偽 URL (#175) を返したが実際は未作成**」は本セッションで確認済み ✅ 解消（PR #175 は既に merge 済と git log で確認）。「**calendar 不一致は無い**」は v318 時点で既に訂正済みの注記で対応不要。
 
 ## 📁 branch / PR 一覧
 
