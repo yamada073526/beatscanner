@@ -49,7 +49,7 @@ describe('PriceLadder (render smoke test)', () => {
   it('AAPL 相当 (pivot 検出・ブレイク未確認) で render エラーを投げず、ブレイク確認ゾーンが描画される', async () => {
     render(<PriceLadder ticker="AAPL" plan="free" />);
     // 主 UI (価格目安 見出し) が表示され、error boundary 相当の例外が render 中に投げられないことを確認。
-    await screen.findByText('価格目安');
+    await screen.findByText(/主要な価格水準/);
     await screen.findByTestId('price-ladder-row-current');
     // ブレイク未確認ゾーンブラケット (Pivot 〜 +5%・pivot の「上」) が pivot 行検出時に描画されること
     // (2026-07-02 drift 修正: pivot 下ではなく上に表示。jsdom の getBoundingClientRect は 0 だが zoneBox は truthy)。
@@ -63,7 +63,7 @@ describe('PriceLadder (render smoke test)', () => {
       overlays: [{ key: 'sma_50', data: [{ value: 292.67 }] }],
     });
     render(<PriceLadder ticker="MSFT" plan="free" />);
-    await screen.findByText('価格目安');
+    await screen.findByText(/主要な価格水準/);
     await screen.findByTestId('price-ladder-row-current');
     expect(screen.queryByTestId('price-ladder-zone-bracket')).toBeNull();
   });
@@ -77,7 +77,7 @@ describe('PriceLadder (render smoke test)', () => {
       overlays: [{ key: 'sma_50', data: [{ value: 292.67 }] }],
     });
     render(<PriceLadder ticker="AAPL" plan="premium" />);
-    await screen.findByText('価格目安');
+    await screen.findByText(/主要な価格水準/);
     await screen.findByTestId('price-ladder-row-current');
     // ブレイク確認済 = zoneBox は非表示 (pivot 行〜現在価格行のブラケットは未確認状態専用)。
     expect(screen.queryByTestId('price-ladder-zone-bracket')).toBeNull();
