@@ -336,11 +336,12 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
     return { levels: raw, current, sma50Dist, distCount, stateText, volRatio, pivot, isBreakoutConfirmed };
   }, [analyst, technical, priceData, ticker]);
 
-  // v7 リッチ化 (2026-07-02 user gate): ブレイク未確認 (現在値 < pivot) のときのみ、pivot 行の上端 〜
-  // 現在価格行の下端をブラケット表示。ブレイク確認後・pivot 未検出時は zoneBox=null で非表示 (§38: 常時表示にしない)。
-  // rangeBox (hover レンジ) と同じ DOM 計測パターンを流用 — 座標のハードコード無し、価格差からの逆算もしない
-  // (pivot は Premium ロックのままなので新規の漏洩経路にはならない: 既存レイアウトの縦間隔で暗に示される
-  // 相対距離を可視化するだけ)。
+  // v7 リッチ化 (2026-07-02 user gate → mockup 再突合せ): ブレイク未確認 (現在値 < pivot) のとき、
+  // pivot 行の「上」に「ブレイク確認ゾーン (Pivot 〜 +5%)」の固定高バンドを表示 (mockup pane3-full-v7.html .zbreak 準拠)。
+  // ⚠️ 旧版は pivot→現在価格の「下」にブラケットを引き "ブレイク確認ゾーン" と誤ラベルしていた (本番 drift・2026-07-02 修正)。
+  // mockup では pivot 下の領域は「監視 (ベース形成中)」であり、ブレイク確認ゾーンは pivot の上 = ブレイク先の目標帯。
+  // ブレイク確認後 (現在値 ≥ pivot)・pivot 未検出時は zoneBox=null で非表示 (§38: 常時表示にしない・下方を匂わせない)。
+  // rangeBox (hover レンジ) と同じ DOM 計測パターンを流用 — 座標のハードコード無し、価格差からの逆算もしない。
   // ⚠️ 2026-07-02 incident: 本 effect を pivot/current/levels の useMemo より前に置いた版が
   // TDZ ReferenceError ("Cannot access 'pivot' before initialization") で本番全クラッシュを起こした
   // (handover 参照)。必ず上記 useMemo の後に置くこと。
@@ -351,12 +352,13 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
       return;
     }
     const pivotEl = c.querySelector('[data-testid="price-ladder-row-pivot"]');
-    const curEl = c.querySelector('[data-testid="price-ladder-row-current"]');
-    if (!pivotEl || !curEl) { setZoneBox(null); return; }
+    if (!pivotEl) { setZoneBox(null); return; }
     const cr = c.getBoundingClientRect();
     const pr = pivotEl.getBoundingClientRect();
-    const ur = curEl.getBoundingClientRect();
-    setZoneBox({ top: pr.top - cr.top, height: Math.max(2, (ur.top + ur.height) - pr.top) });
+    // mockup .zbreak: pivot 行の上端で終わる固定高の帯 (Pivot 〜 +5% の目標帯)。下方向には伸ばさない。
+    const BAND_PX = 26;
+    const pivotTop = pr.top - cr.top;
+    setZoneBox({ top: Math.max(0, pivotTop - BAND_PX), height: BAND_PX });
   }, [pivot, current, levels]);
 
   // loading: CLS envelope (minHeight) + skeleton
@@ -644,7 +646,8 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
             {rangeBox && (
               <span className="pl-spine-range" aria-hidden="true" style={{ top: rangeBox.top, height: rangeBox.height }} />
             )}
-            {/* v7 リッチ化: ブレイク確認ゾーン (pivot 行 〜 現在価格行) の破線ブラケット。中立色のみ (§38)。 */}
+            {/* v7 リッチ化: ブレイク確認ゾーン (Pivot 〜 +5%) を pivot 行の「上」に破線角丸で表示。中立色のみ (§38)。
+                mockup pane3-full-v7.html .zbreak / .zlab.brk 準拠 (pivot 下の「監視」帯とは別物)。 */}
             {zoneBox && (
               <>
                 <span
@@ -656,9 +659,10 @@ export default function PriceLadder({ ticker, plan, onUpgrade }) {
                 <span
                   className="pl-zone-label"
                   aria-hidden="true"
-                  style={{ top: zoneBox.top + zoneBox.height / 2 - 14, lineHeight: 1.25 }}
+                  style={{ top: zoneBox.top + zoneBox.height / 2 - 18, lineHeight: 1.2 }}
                 >
                   ブレイク確認<br />ゾーン
+                  <span className="pl-zone-sub">Pivot 〜 +5%</span>
                 </span>
               </>
             )}

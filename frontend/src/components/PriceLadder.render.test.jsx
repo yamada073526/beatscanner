@@ -46,13 +46,14 @@ afterEach(() => {
 });
 
 describe('PriceLadder (render smoke test)', () => {
-  it('AAPL 相当 (pivot 検出・ブレイク未確認) のデータで render エラーを投げない', async () => {
+  it('AAPL 相当 (pivot 検出・ブレイク未確認) で render エラーを投げず、ブレイク確認ゾーンが描画される', async () => {
     render(<PriceLadder ticker="AAPL" plan="free" />);
     // 主 UI (価格目安 見出し) が表示され、error boundary 相当の例外が render 中に投げられないことを確認。
     await screen.findByText('価格目安');
     await screen.findByTestId('price-ladder-row-current');
-    // ブレイク未確認ゾーンブラケットが (jsdom の getBoundingClientRect は 0 だが) throw せずに描画されること。
-    expect(screen.queryByTestId('price-ladder')).toBeTruthy();
+    // ブレイク未確認ゾーンブラケット (Pivot 〜 +5%・pivot の「上」) が pivot 行検出時に描画されること
+    // (2026-07-02 drift 修正: pivot 下ではなく上に表示。jsdom の getBoundingClientRect は 0 だが zoneBox は truthy)。
+    expect(await screen.findByTestId('price-ladder-zone-bracket')).toBeTruthy();
   });
 
   it('pivot 未検出 (cup_handle なし) でも render エラーを投げない', async () => {

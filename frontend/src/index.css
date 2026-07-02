@@ -13270,16 +13270,16 @@ body.is-digest-resizing {
 
 /* ── 価格目安 リッチ化 (mockup pane3-full-v7.html §③ 準拠、user gate 2026-07-02)。
    却下済み要素 (⏳ / verdict confirm の cyan グラデーション、2026-06-30 3体合議+user gate) は再現しない。
-   ブレイク確認ゾーン: pivot 行 〜 現在価格行 の範囲を破線ブラケットで可視化。中立色のみ (§38: amber/gain 不使用)。
-   位置は JSX 側 (PriceLadder.jsx zoneBox state) で rangeBox と同じ DOM 計測パターンにより算出 (ハードコード無し)。 */
+   ブレイク確認ゾーン: pivot 行の「上」(Pivot 〜 +5% の目標帯) を破線角丸で可視化 (mockup .zbreak 準拠)。
+   中立色のみ (§38: amber/gain 不使用)。pivot 下は「監視」帯であり本ゾーンとは別 (2026-07-02 drift 修正)。
+   位置は JSX 側 (PriceLadder.jsx zoneBox state) で pivot 行を DOM 計測して算出 (ハードコード無し)。 */
 .pl-zone-bracket {
   position: absolute;
   left: calc(-1 * var(--space-4, 16px) - 7px);
   width: 14px;
-  border-left: 2px dashed var(--border-strong);
-  border-top: 2px dashed var(--border-strong);
-  border-bottom: 2px dashed var(--border-strong);
-  border-radius: 6px 0 0 6px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
   pointer-events: none;
 }
 .pl-zone-label {
@@ -13291,6 +13291,14 @@ body.is-digest-resizing {
   color: var(--text-secondary);
   white-space: nowrap;
   pointer-events: none;
+}
+.pl-zone-sub {
+  display: block;
+  margin-top: 1px;
+  font-size: 8.5px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--text-muted);
 }
 
 /* ── 出来高ゲージ (mockup .bo 準拠、inline style → CSS class 化)。判定ロジック (閾値/達成) は不変。 */
